@@ -1,25 +1,7 @@
 const Joi = require("joi");
 
-const sectionDataSchema = Joi.object({
-  // Bu schema'yi section tiplerine göre genişletebilirsiniz
-  cards: Joi.array()
-    .items(
-      Joi.object({
-        title: Joi.string().allow("").optional(),
-        description: Joi.string().allow("").optional(),
-        image: Joi.alternatives()
-          .try(
-            Joi.string().uri(),
-            Joi.object({
-              url: Joi.string().uri(),
-              publicId: Joi.string(),
-            })
-          )
-          .optional(),
-      })
-    )
-    .optional(),
-}).unknown(true); // Diğer field'lar strict mode dışında bırak
+// Mixed data schema
+const sectionDataSchema = Joi.any().default({});
 
 const createProjectSchema = Joi.object({
   title: Joi.string().trim().min(1).max(100).required(),
@@ -68,13 +50,13 @@ const addSectionSchema = Joi.object({
     )
     .required(),
   title: Joi.string().trim().max(100).allow("").optional(),
-  data: sectionDataSchema.optional(),
+  data: sectionDataSchema,
 });
 
 const updateSectionSchema = Joi.object({
   title: Joi.string().trim().max(100).allow("").optional(),
   isActive: Joi.boolean().optional(),
-  data: sectionDataSchema.optional(),
+  data: sectionDataSchema,
 });
 
 const reorderSectionsSchema = Joi.object({

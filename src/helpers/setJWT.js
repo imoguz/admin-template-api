@@ -34,7 +34,7 @@ module.exports = async ({ email, password, userId }, refreshToken = null) => {
       role: user.role,
     },
     process.env.ACCESS_KEY,
-    { expiresIn: "30m" }
+    { expiresIn: "1h" }
   );
 
   const newRefreshToken =

@@ -3,42 +3,67 @@
 const Joi = require("joi");
 
 const envVarsSchema = Joi.object({
+  // Required
   NODE_ENV: Joi.string()
     .valid("development", "production", "test")
-    .default("production"),
-  PORT: Joi.number().port().default(8000),
-  MONGODB: Joi.string().uri().required(),
-  ACCESS_KEY: Joi.string().min(32).required(),
-  REFRESH_KEY: Joi.string().min(32).required(),
+    .default("development"),
+  PORT: Joi.number().default(8000),
+  MONGODB: Joi.string().required().description("MongoDB connection string"),
+  ACCESS_KEY: Joi.string()
+    .min(32)
+    .required()
+    .description("JWT Access Token Secret"),
+  REFRESH_KEY: Joi.string()
+    .min(32)
+    .required()
+    .description("JWT Refresh Token Secret"),
+
+  // Redis Configuration
+  REDIS_URL: Joi.string().optional(),
+  REDIS_URL_DEVELOPMENT: Joi.string()
+    .optional()
+    .default("redis://localhost:6379"),
+  REDIS_URL_PRODUCTION: Joi.string().optional().default("redis://redis:6379"),
+  REDIS_TTL: Joi.number().default(3600),
+  REDIS_PASSWORD: Joi.string().optional().allow(""),
+  REDIS_DB: Joi.number().default(0),
+
+  // Optional with defaults
   ALLOWED_ORIGINS: Joi.string().optional(),
   LOGFOLDER: Joi.string().default("./logs"),
-})
-  .unknown()
-  .required(); // Tüm environment variables required
 
-const { error, value: envVars } = envVarsSchema.validate(process.env, {
-  abortEarly: false,
-  stripUnknown: true,
-});
+  // Cloudinary (optional)
+  CLOUDINARY_CLOUD_NAME: Joi.string().optional(),
+  CLOUDINARY_API_KEY: Joi.string().optional(),
+  CLOUDINARY_API_SECRET: Joi.string().optional(),
+}).unknown();
+
+const { error, value: envVars } = envVarsSchema.validate(process.env);
 
 if (error) {
-  const errorMessage = error.details.map((detail) => detail.message).join(", ");
-  throw new Error(`Environment validation failed: ${errorMessage}`);
+  throw new Error(`Environment validation error: ${error.message}`);
 }
 
-// Production için ek kontroller
-if (envVars.NODE_ENV === "production") {
-  if (!envVars.MONGODB.includes("mongodb://")) {
-    throw new Error(
-      "MONGODB must be a valid MongoDB connection string in production"
-    );
-  }
-
-  if (envVars.ACCESS_KEY === "your-super-secure-access-key-min-32-chars") {
-    throw new Error("Please set a secure ACCESS_KEY in production");
+// Akıllı Redis URL seçimi
+if (!envVars.REDIS_URL) {
+  if (envVars.NODE_ENV === "production") {
+    envVars.REDIS_URL = envVars.REDIS_URL_PRODUCTION;
+  } else {
+    envVars.REDIS_URL = envVars.REDIS_URL_DEVELOPMENT;
   }
 }
 
-console.log("Environment variables validated successfully");
-console.log(`Environment: ${envVars.NODE_ENV}`);
-console.log(`Database: ${envVars.MONGODB ? "Configured" : "Missing"}`);
+// Password'u URL'ye ekle
+if (envVars.REDIS_PASSWORD && envVars.REDIS_PASSWORD !== "") {
+  const url = new URL(envVars.REDIS_URL);
+  url.username = "default";
+  url.password = envVars.REDIS_PASSWORD;
+  envVars.REDIS_URL = url.toString();
+}
+
+console.log("✅ Environment variables validated successfully");
+console.log(`📍 Environment: ${envVars.NODE_ENV}`);
+console.log(`🗄️  Database: ${envVars.MONGODB ? "Configured" : "Missing"}`);
+console.log(`🔮 Redis: ${envVars.REDIS_URL.replace(/:[^:]*?@/, ":****@")}`);
+
+module.exports = envVars;

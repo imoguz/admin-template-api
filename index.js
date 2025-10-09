@@ -18,7 +18,19 @@ try {
 
 // ----- Security Headers with Helmet -----
 const helmet = require("helmet");
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false, // Gerekirse adjust et
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+  })
+);
 
 // ----- Database Connection -----
 require("./src/configs/dbConnection")();
@@ -64,22 +76,39 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // ----- Rate Limiting -----
-// const { globalLimiter } = require("./src/middlewares/rateLimiter");
-// app.use(globalLimiter);
+const { globalLimiter } = require("./src/middlewares/rateLimiter");
+app.use(globalLimiter);
 
 // ----- middlewares -----
 
-// -----Query Handler -----
+// ----- Security Middlewares -----
+
+// 1. URL Security (ilk sırada)
+const urlSecurity = require("./src/middlewares/urlSecurity");
+app.use(urlSecurity);
+
+// 2. Query Handler
 const queryHandler = require("./src/middlewares/queryHandler");
 app.use(queryHandler);
 
-// ----- NoSQL Injection Protection -----
+// 3. NoSQL Injection Protection
 const sanitize = require("./src/middlewares/sanitize");
 app.use(sanitize);
 
+// 4. File Upload Security
+const fileUploadSecurity = require("./src/middlewares/fileUploadSecurity");
+app.use(fileUploadSecurity);
+
+// 5. XSS Protection
+const xssSanitize = require("./src/middlewares/xssSanitize");
+app.use(xssSanitize);
 // -----Logger -----
 const logger = require("./src/middlewares/logger");
 app.use(logger);
+
+// ----- Audit Middleware -----
+const { auditMiddleware } = require("./src/helpers/audit.helper");
+app.use(auditMiddleware);
 
 // ----- swagger documents -----
 const swaggerUi = require("swagger-ui-express");
@@ -89,9 +118,6 @@ app.use("/api-docs/swagger", swaggerUi.serve, swaggerUi.setup(swaggerSpecs));
 // ----- routes -----
 const routes = require("./src/routes");
 app.use("/api/v1", routes);
-
-// ----- Health Check Route -----
-app.use("/health", require("./src/routes/health.route"));
 
 // ----- 404 Catch-All Middleware -----
 app.use((req, res, next) => {

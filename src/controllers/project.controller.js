@@ -159,24 +159,26 @@ module.exports = {
       const { title, isActive } = req.body;
       let { data } = req.body;
 
-      // Data validation
+      // Data handling - daha esnek hale getir
+      if (data === undefined || data === null) {
+        data = {}; // undefined veya null ise boş object yap
+      }
+
+      // String ise JSON parse etmeye çalış
       if (typeof data === "string") {
         try {
-          data = JSON.parse(data);
+          if (data.trim() === "") {
+            data = {}; // Boş string ise boş object
+          } else {
+            data = JSON.parse(data);
+          }
         } catch (parseError) {
-          return res.status(400).json({
-            error: "Invalid data format. Must be valid JSON.",
-          });
+          console.warn("JSON parse failed, using string as data:", data);
+          // Parse edilemezse string olarak bırak
         }
       }
 
-      // Data type validation
-      if (data && typeof data !== "object") {
-        return res.status(400).json({
-          error: "Data must be an object.",
-        });
-      }
-
+      // Data artık her türlü olabilir (object, array, string, number, boolean)
       const project = await Project.findById(projectId);
       if (!project) return res.status(404).json({ error: "Project not found" });
 
@@ -185,8 +187,14 @@ module.exports = {
 
       const files = req.files || [];
 
-      // Image upload with enhanced validation
-      if (data.cards && Array.isArray(data.cards)) {
+      // Eğer data object ise ve cards array'i varsa image processing yap
+      if (
+        data &&
+        typeof data === "object" &&
+        !Array.isArray(data) &&
+        data.cards &&
+        Array.isArray(data.cards)
+      ) {
         // Validate cards array size
         if (data.cards.length > 50) {
           return res.status(400).json({
@@ -197,14 +205,13 @@ module.exports = {
         data.cards = await Promise.all(
           data.cards.map(async (card, idx) => {
             if (!card || typeof card !== "object") {
-              return card; // Skip invalid cards
+              return card;
             }
 
             const fileFieldName = `cards[${idx}][image]`;
             const file = files.find((f) => f.fieldname === fileFieldName);
 
             if (file) {
-              // Validate file type
               const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
               if (!allowedMimeTypes.includes(file.mimetype)) {
                 throw new Error(
@@ -212,10 +219,6 @@ module.exports = {
                 );
               }
 
-              console.log(
-                `Uploading image for card ${idx}:`,
-                file.originalname
-              );
               const result = await uploadToCloudinaryBuffer(
                 file.buffer,
                 file.originalname
@@ -229,13 +232,12 @@ module.exports = {
               };
             }
 
-            // Existing image handling with validation
+            // Existing image handling
             if (
               card.image &&
               typeof card.image === "string" &&
               card.image.trim() !== ""
             ) {
-              // Basic URL validation
               try {
                 new URL(card.image);
                 return {
@@ -263,17 +265,21 @@ module.exports = {
         );
       }
 
-      // Update section with validation
+      // Update section
       if (title !== undefined) section.title = title.trim();
       if (isActive !== undefined) section.isActive = Boolean(isActive);
       if (data !== undefined) {
-        // Deep object size validation
-        if (JSON.stringify(data).length > 100000) {
-          // 100KB limit
-          return res.status(400).json({
-            error: "Section data too large. Maximum 100KB allowed.",
-          });
+        // Size validation (sadece stringify edilebilir veriler için)
+        try {
+          if (JSON.stringify(data).length > 100000) {
+            return res.status(400).json({
+              error: "Section data too large. Maximum 100KB allowed.",
+            });
+          }
+        } catch (stringifyError) {
+          console.warn("Data cannot be stringified for size check:", data);
         }
+
         section.data = data;
       }
 

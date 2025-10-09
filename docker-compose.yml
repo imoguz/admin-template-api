@@ -1,18 +1,22 @@
 services:
+  # Backend API
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     container_name: admin-template-api
     ports:
       - "8000:8000"
     environment:
       - NODE_ENV=production
       - PORT=8000
-      - MONGODB=mongodb://host.docker.internal:27017/template
+      - MONGODB=${MONGODB}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - REDIS_TTL=3600
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
     env_file:
       - .env
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -20,3 +24,25 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: admin-template-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  redis_data:
