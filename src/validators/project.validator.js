@@ -1,4 +1,13 @@
 const Joi = require("joi");
+const mongoose = require("mongoose");
+
+// ObjectId validation
+const objectIdSchema = Joi.string().custom((value, helpers) => {
+  if (!mongoose.Types.ObjectId.isValid(value)) {
+    return helpers.error("any.invalid");
+  }
+  return value;
+}, "ObjectId Validation");
 
 // Mixed data schema
 const sectionDataSchema = Joi.any().default({});
@@ -30,25 +39,9 @@ const updateProjectSchema = Joi.object({
 });
 
 const addSectionSchema = Joi.object({
-  template: Joi.string()
-    .valid(
-      "header",
-      "hero",
-      "contact-form",
-      "services",
-      "testimonials",
-      "video-showcase",
-      "featured-product",
-      "statistics",
-      "top-choice",
-      "cta-banner",
-      "how-it-works",
-      "best-choice",
-      "highlights",
-      "faq",
-      "footer"
-    )
-    .required(),
+  template: objectIdSchema.required().messages({
+    "any.invalid": "Template must be a valid ObjectId",
+  }),
   title: Joi.string().trim().max(100).allow("").optional(),
   data: sectionDataSchema,
 });

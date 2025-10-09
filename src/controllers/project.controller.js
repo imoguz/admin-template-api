@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
+const sanitizeHtml = require("sanitize-html");
 const Project = require("../models/project.model");
 const { createAuditLog } = require("../helpers/audit.helper");
+const SectionTemplate = require("../models/sectionTemplate.model");
 const {
   uploadToCloudinaryBuffer,
   deleteFromCloudinary,
@@ -11,10 +13,24 @@ const validateSlug = (slug) => {
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
 };
 
+// HTML sanitize configuration
+const sanitizeConfig = {
+  allowedTags: ["b", "i", "em", "strong", "a", "p", "br", "ul", "ol", "li"],
+  allowedAttributes: {
+    a: ["href", "target", "rel"],
+  },
+  allowedSchemes: ["http", "https"],
+};
+
+// Safe sanitize function
+const safeSanitize = (input) => {
+  if (typeof input !== "string") return input;
+  return sanitizeHtml(input.trim(), sanitizeConfig);
+};
+
 module.exports = {
   createProject: async (req, res) => {
     try {
-      // Input sanitization
       const { title, slug, description } = req.body;
 
       // Ek slug validation
@@ -25,10 +41,12 @@ module.exports = {
         });
       }
 
-      // Slug uniqueness check
+      // Slug uniqueness check - sanitize edilmiş haliyle kontrol et
+      const cleanSlug = safeSanitize(slug).toLowerCase();
       const existingProject = await Project.findOne({
-        slug: sanitize.html(slug),
+        slug: cleanSlug,
       });
+
       if (existingProject) {
         return res.status(409).json({
           error: "A project with this slug already exists.",
@@ -47,7 +65,7 @@ module.exports = {
 
         const result = await uploadToCloudinaryBuffer(
           req.file.buffer,
-          sanitize.html(req.file.originalname)
+          safeSanitize(req.file.originalname)
         );
         thumbnail = {
           url: result.secure_url,
@@ -56,9 +74,9 @@ module.exports = {
       }
 
       const project = await Project.create({
-        title: sanitize.html(title).trim(),
-        slug: sanitize.html(slug).toLowerCase().trim(),
-        description: description ? sanitize.html(description).trim() : "",
+        title: safeSanitize(title),
+        slug: cleanSlug,
+        description: description ? safeSanitize(description) : "",
         thumbnail,
         createdBy: req.user?._id,
       });
@@ -80,7 +98,9 @@ module.exports = {
 
   listProjects: async (req, res) => {
     try {
-      const projects = await Project.find().sort({ updatedAt: -1 });
+      const projects = await Project.find()
+        .populate("sections.template", "name description icon")
+        .sort({ updatedAt: -1 });
       res.json({ data: projects });
     } catch (err) {
       console.error(err);
@@ -90,9 +110,13 @@ module.exports = {
 
   getProject: async (req, res) => {
     try {
-      const p = await Project.findById(req.params.id);
-      if (!p) return res.status(404).json({ error: "Project not found" });
-      res.json({ data: p });
+      const project = await Project.findById(req.params.id).populate(
+        "sections.template",
+        "name description icon"
+      );
+
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      res.json({ data: project });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Server error" });
@@ -101,12 +125,21 @@ module.exports = {
 
   updateProject: async (req, res) => {
     try {
-      const updates = req.body;
-      const p = await Project.findByIdAndUpdate(req.params.id, updates, {
+      const { title, slug, description } = req.body;
+      const updates = {};
+
+      // Sadece provided field'ları güncelle
+      if (title !== undefined) updates.title = safeSanitize(title);
+      if (slug !== undefined) updates.slug = safeSanitize(slug).toLowerCase();
+      if (description !== undefined)
+        updates.description = safeSanitize(description);
+
+      const project = await Project.findByIdAndUpdate(req.params.id, updates, {
         new: true,
-      });
-      if (!p) return res.status(404).json({ error: "Project not found" });
-      res.json({ data: p });
+      }).populate("sections.template", "name description icon");
+
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      res.json({ data: project });
     } catch (err) {
       console.error(err);
       res.status(400).json({ error: err.message });
@@ -137,16 +170,38 @@ module.exports = {
   addSection: async (req, res) => {
     try {
       const { template, title = "", data = {} } = req.body;
+
+      const templateExists = await SectionTemplate.findOne({
+        _id: template,
+        isActive: true,
+      });
+
+      if (!templateExists) {
+        return res.status(400).json({
+          error: "Invalid template or template is not active",
+        });
+      }
+
       const project = await Project.findById(req.params.id);
       if (!project) return res.status(404).json({ error: "Project not found" });
 
       const sectionId = new mongoose.Types.ObjectId();
       const order = project.sections.length;
-      const section = { _id: sectionId, template, title, data, order };
+      const section = {
+        _id: sectionId,
+        template,
+        title: safeSanitize(title),
+        data,
+        order,
+      };
 
       project.sections.push(section);
       await project.save();
-      res.status(201).json({ data: section });
+      await project.populate("sections.template", "name description icon");
+
+      res.status(201).json({
+        data: project.sections.id(sectionId),
+      });
     } catch (err) {
       console.error(err);
       res.status(400).json({ error: err.message });
@@ -159,26 +214,24 @@ module.exports = {
       const { title, isActive } = req.body;
       let { data } = req.body;
 
-      // Data handling - daha esnek hale getir
+      // Data handling
       if (data === undefined || data === null) {
-        data = {}; // undefined veya null ise boş object yap
+        data = {};
       }
 
       // String ise JSON parse etmeye çalış
       if (typeof data === "string") {
         try {
           if (data.trim() === "") {
-            data = {}; // Boş string ise boş object
+            data = {};
           } else {
             data = JSON.parse(data);
           }
         } catch (parseError) {
           console.warn("JSON parse failed, using string as data:", data);
-          // Parse edilemezse string olarak bırak
         }
       }
 
-      // Data artık her türlü olabilir (object, array, string, number, boolean)
       const project = await Project.findById(projectId);
       if (!project) return res.status(404).json({ error: "Project not found" });
 
@@ -187,7 +240,7 @@ module.exports = {
 
       const files = req.files || [];
 
-      // Eğer data object ise ve cards array'i varsa image processing yap
+      // Image processing for cards
       if (
         data &&
         typeof data === "object" &&
@@ -195,7 +248,6 @@ module.exports = {
         data.cards &&
         Array.isArray(data.cards)
       ) {
-        // Validate cards array size
         if (data.cards.length > 50) {
           return res.status(400).json({
             error: "Too many cards. Maximum 50 cards allowed.",
@@ -265,11 +317,10 @@ module.exports = {
         );
       }
 
-      // Update section
-      if (title !== undefined) section.title = title.trim();
+      // Update section with sanitization
+      if (title !== undefined) section.title = safeSanitize(title);
       if (isActive !== undefined) section.isActive = Boolean(isActive);
       if (data !== undefined) {
-        // Size validation (sadece stringify edilebilir veriler için)
         try {
           if (JSON.stringify(data).length > 100000) {
             return res.status(400).json({
@@ -279,12 +330,13 @@ module.exports = {
         } catch (stringifyError) {
           console.warn("Data cannot be stringified for size check:", data);
         }
-
         section.data = data;
       }
 
       await project.save();
-      res.json({ data: section });
+      await project.populate("sections.template", "name description icon");
+
+      res.json({ data: project.sections.id(sectionId) });
     } catch (err) {
       console.error("Update section error:", err);
 
@@ -307,10 +359,9 @@ module.exports = {
 
       project.sections.pull({ _id: sectionId });
 
-      // reindex order
-      project.sections = project.sections.map((s, idx) => {
-        s.order = idx;
-        return s;
+      // Reindex order
+      project.sections.forEach((sec, idx) => {
+        sec.order = idx;
       });
 
       await project.save();
@@ -325,15 +376,17 @@ module.exports = {
     try {
       const { id } = req.params;
       const { order } = req.body;
-      if (!Array.isArray(order))
+
+      if (!Array.isArray(order)) {
         return res.status(400).json({ error: "order must be an array" });
+      }
 
       const project = await Project.findById(id);
       if (!project) return res.status(404).json({ error: "Project not found" });
 
       const map = {};
-      project.sections.forEach((s) => {
-        map[s._id.toString()] = s.toObject();
+      project.sections.forEach((sec) => {
+        map[sec._id.toString()] = sec.toObject();
       });
 
       const newSections = [];
@@ -353,6 +406,8 @@ module.exports = {
 
       project.sections = newSections;
       await project.save();
+      await project.populate("sections.template", "name description icon");
+
       res.json({ data: project.sections });
     } catch (err) {
       console.error(err);

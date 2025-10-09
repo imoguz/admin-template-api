@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Schema } = mongoose;
+const { Schema, model } = mongoose;
 
 const SectionSchema = new Schema(
   {
@@ -9,25 +9,9 @@ const SectionSchema = new Schema(
     },
 
     template: {
-      type: String,
+      type: Schema.Types.ObjectId,
+      ref: "SectionTemplate",
       required: true,
-      enum: [
-        "header",
-        "hero",
-        "contact-form",
-        "services",
-        "testimonials",
-        "video-showcase",
-        "featured-product",
-        "statistics",
-        "top-choice",
-        "cta-banner",
-        "how-it-works",
-        "best-choice",
-        "highlights",
-        "faq",
-        "footer",
-      ],
     },
 
     title: {
@@ -97,5 +81,7 @@ const ProjectSchema = new Schema(
   { timestamps: true }
 );
 
-module.exports =
-  mongoose.models.Project || mongoose.model("Project", ProjectSchema);
+// Index for better query performance
+ProjectSchema.index({ slug: 1 });
+
+module.exports = model("Project", ProjectSchema);
