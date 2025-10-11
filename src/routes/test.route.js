@@ -3,6 +3,7 @@
 const router = require("express").Router();
 const Project = require("../models/project.model");
 const cache = require("../helpers/cache");
+const cacheService = require("../services/cache.service");
 
 // Cache status with detailed info
 router.get("/cache-status", async (req, res) => {
@@ -70,6 +71,19 @@ router.get("/cache-test", async (req, res) => {
       message: err.message,
       timestamp: new Date().toISOString(),
     });
+  }
+});
+
+router.post("/clear-cache/:pattern", async (req, res) => {
+  try {
+    const { pattern } = req.params;
+    await cacheService.deletePattern(pattern);
+    res.json({
+      success: true,
+      message: `Cache cleared for pattern: ${pattern}`,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

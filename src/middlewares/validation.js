@@ -1,7 +1,6 @@
 "use strict";
 
 const Joi = require("joi");
-const createHttpError = require("http-errors");
 
 // Enhanced Joi validation with security features
 const validate = (schema, source = "body") => {

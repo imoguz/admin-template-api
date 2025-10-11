@@ -1,7 +1,7 @@
 "use strict";
 
 const router = require("express").Router();
-const { authLimiter } = require("../middlewares/rateLimiter");
+const authRateLimiter = require("../middlewares/authRateLimiter"); // YENİ - custom rate limiter
 const validate = require("../middlewares/validation");
 const {
   loginSchema,
@@ -18,7 +18,10 @@ const {
   resetPassword,
 } = require("../controllers/auth.controller");
 
-router.post("/login", authLimiter, validate(loginSchema), login);
+// ÖZEL: Sadece validation'dan geçmiş login attempt'ler için custom rate limiter
+router.post("/login", authRateLimiter, validate(loginSchema), login);
+
+// Diğer auth endpoint'leri için genel rate limiting (opsiyonel)
 router.post("/refresh", validate(refreshTokenSchema), refreshToken);
 router.post("/logout", validate(refreshTokenSchema), logout);
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);

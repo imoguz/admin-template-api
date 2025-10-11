@@ -81,7 +81,4 @@ const ProjectSchema = new Schema(
   { timestamps: true }
 );
 
-// Index for better query performance
-ProjectSchema.index({ slug: 1 });
-
 module.exports = model("Project", ProjectSchema);

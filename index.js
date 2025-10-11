@@ -16,17 +16,37 @@ try {
   process.exit(1);
 }
 
+// ----- Initialize Redis & Cache -----
+const cacheService = require("./src/services/cache.service");
+const redisManager = require("./src/configs/redis");
+
+// Async initialization
+const initializeServices = async () => {
+  try {
+    await cacheService.init();
+    console.log("✅ All services initialized");
+  } catch (error) {
+    console.error("❌ Service initialization failed:", error.message);
+  }
+};
+
 // ----- Security Headers with Helmet -----
 const helmet = require("helmet");
 app.use(
   helmet({
-    crossOriginEmbedderPolicy: false, // Gerekirse adjust et
+    crossOriginEmbedderPolicy: false,
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'"],
-        imgSrc: ["'self'", "data:", "https:"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        scriptSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+        imgSrc: ["'self'", "data:", "https:", "blob:"],
+        fontSrc: [
+          "'self'",
+          "https://cdnjs.cloudflare.com",
+          "https://fonts.gstatic.com",
+        ],
+        connectSrc: ["'self'", "https://cdnjs.cloudflare.com"],
       },
     },
   })
@@ -76,9 +96,15 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // ----- Rate Limiting -----
-const { globalLimiter } = require("./src/middlewares/rateLimiter");
-app.use(globalLimiter);
+const {
+  globalLimiter,
+  authLimiter,
+  apiLimiter,
+  publicLimiter,
+} = require("./src/middlewares/redisRateLimiter");
 
+// Global rate limiter (fallback olarak)
+app.use(globalLimiter);
 // ----- middlewares -----
 
 // ----- Security Middlewares -----
@@ -128,5 +154,25 @@ app.use((req, res, next) => {
 const errorHandler = require("./src/middlewares/errorHandler");
 app.use(errorHandler);
 
+// ----- Graceful shutdown -----
+process.on("SIGINT", async () => {
+  console.log("🔄 Received SIGINT. Shutting down gracefully...");
+  await redisManager.disconnect();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  console.log("🔄 Received SIGTERM. Shutting down gracefully...");
+  await redisManager.disconnect();
+  process.exit(0);
+});
+
 // ----- Start server -----
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+app.listen(PORT, async () => {
+  await initializeServices();
+  console.log(`✅ Server is running on port ${PORT}`);
+  console.log(`📍 Environment: ${process.env.NODE_ENV}`);
+  console.log(
+    `🔮 Redis: ${redisManager.isConnected ? "Connected" : "Disconnected"}`
+  );
+});

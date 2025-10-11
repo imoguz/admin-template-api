@@ -2,19 +2,44 @@
 
 const SectionTemplate = require("../models/sectionTemplate.model");
 const { createAuditLog } = require("../helpers/audit.helper");
+const cacheService = require("../services/cache.service");
+
+// Cache keys
+const CACHE_KEYS = {
+  ALL_TEMPLATES: "section:templates:all",
+  TEMPLATE_DETAIL: (id) => `section:template:${id}`,
+};
 
 module.exports = {
   listTemplates: async (req, res) => {
     try {
+      // Cache'ten getirmeyi dene
+      const cacheKey = CACHE_KEYS.ALL_TEMPLATES;
+      const cached = await cacheService.get(cacheKey);
+
+      if (cached) {
+        return res.json({
+          success: true,
+          data: cached,
+          count: cached.length,
+          source: "cache",
+        });
+      }
+
+      // Cache'te yok, database'den getir
       const templates = await SectionTemplate.find({ isActive: true })
         .sort({ name: 1 })
-        .select("name description icon")
+        .select("name description icon slug")
         .lean();
+
+      // Cache'e kaydet (5 dakika)
+      await cacheService.set(cacheKey, templates, 300);
 
       res.json({
         success: true,
         data: templates,
         count: templates.length,
+        source: "database",
       });
     } catch (err) {
       console.error("List templates error:", err);
@@ -25,10 +50,21 @@ module.exports = {
     }
   },
 
-  // Template detayını getir
   getTemplate: async (req, res) => {
     try {
       const { id } = req.params;
+
+      // Cache'ten getirmeyi dene
+      const cacheKey = CACHE_KEYS.TEMPLATE_DETAIL(id);
+      const cached = await cacheService.get(cacheKey);
+
+      if (cached) {
+        return res.json({
+          success: true,
+          data: cached,
+          source: "cache",
+        });
+      }
 
       const template = await SectionTemplate.findById(id);
       if (!template) {
@@ -38,9 +74,13 @@ module.exports = {
         });
       }
 
+      // Cache'e kaydet (10 dakika)
+      await cacheService.set(cacheKey, template, 600);
+
       res.json({
         success: true,
         data: template,
+        source: "database",
       });
     } catch (err) {
       console.error("Get template error:", err);
@@ -51,7 +91,6 @@ module.exports = {
     }
   },
 
-  // Yeni template ekle (admin only)
   createTemplate: async (req, res) => {
     try {
       const { name, slug, description = "", icon = "" } = req.body;
@@ -67,7 +106,7 @@ module.exports = {
       if (existingTemplate) {
         return res.status(409).json({
           error: true,
-          message: "A template with this name already exists",
+          message: "A template with this name or slug already exists",
         });
       }
 
@@ -78,12 +117,15 @@ module.exports = {
         icon: icon.trim(),
       });
 
+      // Cache'i temizle
+      await cacheService.deletePattern("section:templates:*");
+
       // Audit log
       await createAuditLog({
         collectionName: "sectionTemplates",
         documentId: template._id,
         changedBy: req.user?.id,
-        changedFields: ["name", "description", "icon"],
+        changedFields: ["name", "slug", "description", "icon"],
         operation: "create",
         previousValues: {},
         newValues: template.toObject(),
@@ -102,7 +144,6 @@ module.exports = {
     }
   },
 
-  // Template güncelle (admin only)
   updateTemplate: async (req, res) => {
     try {
       const { id } = req.params;
@@ -129,7 +170,7 @@ module.exports = {
         if (existingTemplate) {
           return res.status(409).json({
             error: true,
-            message: "A template with this name already exists",
+            message: "A template with this name or slug already exists",
           });
         }
       }
@@ -143,6 +184,9 @@ module.exports = {
       });
 
       await template.save();
+
+      // Cache'i temizle
+      await cacheService.deletePattern("section:templates:*");
 
       // Audit log
       await createAuditLog({
@@ -168,11 +212,10 @@ module.exports = {
     }
   },
 
-  // Template sil (soft delete - admin only)
   deleteTemplate: async (req, res) => {
     try {
       const { id } = req.params;
-      console.log("delete id :*******", id);
+
       const template = await SectionTemplate.findById(id);
       if (!template) {
         return res.status(404).json({
@@ -197,6 +240,9 @@ module.exports = {
       const previousValues = template.toObject();
       template.isActive = false;
       await template.save();
+
+      // Cache'i temizle
+      await cacheService.deletePattern("section:templates:*");
 
       // Audit log
       await createAuditLog({

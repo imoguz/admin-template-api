@@ -1,14 +1,27 @@
 "use strict";
 
 const router = require("express").Router();
-const { authLimiter, strictLimiter } = require("../middlewares/rateLimiter");
+const {
+  apiLimiter,
+  publicLimiter,
+} = require("../middlewares/redisRateLimiter");
 
-router.use("/health", require("./health.route"));
+// NOT: authLimiter artık kullanılmıyor, auth.route'da custom rate limiter var
 
-router.use("/auth", authLimiter, require("./auth.route"));
+// Public routes with higher rate limits
+router.use("/health", publicLimiter, require("./health.route"));
 
-router.use("/users", require("./user.route"));
-router.use("/projects", require("./project.route"));
-router.use("/section-template", require("./sectionTemplate.route"));
-router.use("/test", require("./test.route"));
+// Auth routes - artık auth.route.js içinde custom rate limiter var
+router.use("/auth", require("./auth.route")); // authLimiter kaldırıldı
+
+// API routes with standard rate limiting
+router.use("/users", apiLimiter, require("./user.route"));
+router.use("/projects", apiLimiter, require("./project.route"));
+router.use(
+  "/section-template",
+  publicLimiter,
+  require("./sectionTemplate.route")
+);
+router.use("/test", apiLimiter, require("./test.route"));
+
 module.exports = router;
