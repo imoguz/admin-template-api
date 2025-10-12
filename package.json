@@ -12,7 +12,17 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:security": "cross-env NODE_ENV=test jest src/tests/security.test.js --verbose",
     "test:manual": "node src/tests/manual-security-test.js",
-    "test:all": "npm run test:security"
+    "test:all": "npm run test:security",
+    "backup:full": "node src/scripts/backup.js",
+    "backup:quick": "node src/scripts/backup.js --quick",
+    "restore:list": "node src/scripts/restore.js list",
+    "restore:dry-run": "node src/scripts/restore.js --dry-run",
+    "restore:force": "node src/scripts/restore.js --force --drop",
+    "restore:selective": "node src/scripts/restore.js --collections=projects,users",
+    "backup:health": "node src/scripts/backup-health.js",
+    "db:collections": "node src/scripts/collection-checker.js",
+    "mongodump:debug": "node src/scripts/backup/mongodump-debug.js",
+    "backup:debug": "node src/scripts/backup-debug.js"
   },
   "keywords": [],
   "author": "",
@@ -40,6 +50,7 @@
     "sanitize-html": "^2.17.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
+    "tar": "^7.5.1",
     "validator": "^13.15.0"
   },
   "devDependencies": {

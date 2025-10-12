@@ -17,6 +17,10 @@ const PERMISSIONS = {
 
   // Manage Section Template
   MANAGE_TEMPLATES: ["admin"],
+
+  // Backup / Restore
+  MANAGE_BACKUPS: [],
+  VIEW_BACKUPS: [],
 };
 
 module.exports = PERMISSIONS;

@@ -23,5 +23,6 @@ router.use(
   require("./sectionTemplate.route")
 );
 router.use("/test", apiLimiter, require("./test.route"));
+router.use("/backup", apiLimiter, require("./backup.route"));
 
 module.exports = router;

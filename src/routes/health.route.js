@@ -4,6 +4,8 @@ const router = require("express").Router();
 const mongoose = require("mongoose");
 const cacheService = require("../services/cache.service");
 const redisManager = require("../configs/redis");
+const path = require("path");
+const fs = require("fs");
 
 // Basic health check
 router.get("/", (req, res) => {
@@ -163,6 +165,63 @@ router.get("/detailed", async (req, res) => {
       status: "unhealthy",
       error: error.message,
       timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Backup health check
+router.get("/backup", async (req, res) => {
+  try {
+    const backupDir = path.join(process.cwd(), "backups");
+
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+      return res.json({
+        status: "degraded",
+        message: "Backup directory created, no backups yet",
+        backupSystem: "operational",
+        latestBackup: "none",
+        totalBackups: 0,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const backups = fs
+      .readdirSync(backupDir)
+      .filter((file) => file.endsWith(".tar.gz"))
+      .sort()
+      .reverse();
+
+    const latestBackup = backups[0];
+    let healthStatus = "healthy";
+    let message = "Backup system operational";
+
+    if (!latestBackup) {
+      healthStatus = "degraded";
+      message = "No backups found";
+    } else {
+      const backupPath = path.join(backupDir, latestBackup);
+      const backupAge = Date.now() - fs.statSync(backupPath).mtimeMs;
+      const ageInDays = backupAge / (1000 * 60 * 60 * 24);
+
+      if (ageInDays > 2) {
+        healthStatus = "degraded";
+        message = `Last backup is ${Math.floor(ageInDays)} days old`;
+      }
+    }
+
+    res.json({
+      status: healthStatus,
+      message: message,
+      backupSystem: "operational",
+      latestBackup: latestBackup || "none",
+      totalBackups: backups.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: "unhealthy",
+      error: "Backup system error: " + error.message,
     });
   }
 });
