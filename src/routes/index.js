@@ -6,13 +6,11 @@ const {
   publicLimiter,
 } = require("../middlewares/redisRateLimiter");
 
-// NOT: authLimiter artık kullanılmıyor, auth.route'da custom rate limiter var
-
 // Public routes with higher rate limits
 router.use("/health", publicLimiter, require("./health.route"));
 
-// Auth routes - artık auth.route.js içinde custom rate limiter var
-router.use("/auth", require("./auth.route")); // authLimiter kaldırıldı
+// Auth routes - custom rate limiter in auth.route.js
+router.use("/auth", require("./auth.route"));
 
 // API routes with standard rate limiting
 router.use("/users", apiLimiter, require("./user.route"));
@@ -23,7 +21,5 @@ router.use(
   require("./sectionTemplate.route")
 );
 router.use("/test", apiLimiter, require("./test.route"));
-router.use("/backup", apiLimiter, require("./backup.route"));
-router.use("/restore", apiLimiter, require("./restore.route"));
 
 module.exports = router;

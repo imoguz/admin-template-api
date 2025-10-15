@@ -13,7 +13,7 @@ const CACHE_KEYS = {
 module.exports = {
   listTemplates: async (req, res) => {
     try {
-      // Cache'ten getirmeyi dene
+      // try retrive from cache
       const cacheKey = CACHE_KEYS.ALL_TEMPLATES;
       const cached = await cacheService.get(cacheKey);
 
@@ -26,13 +26,13 @@ module.exports = {
         });
       }
 
-      // Cache'te yok, database'den getir
+      // if not in cache fetch database
       const templates = await SectionTemplate.find({ isActive: true })
         .sort({ name: 1 })
         .select("name description icon slug")
         .lean();
 
-      // Cache'e kaydet (5 dakika)
+      // Save cache (5m)
       await cacheService.set(cacheKey, templates, 300);
 
       res.json({
@@ -54,7 +54,7 @@ module.exports = {
     try {
       const { id } = req.params;
 
-      // Cache'ten getirmeyi dene
+      // Retrive from cache
       const cacheKey = CACHE_KEYS.TEMPLATE_DETAIL(id);
       const cached = await cacheService.get(cacheKey);
 
@@ -74,7 +74,7 @@ module.exports = {
         });
       }
 
-      // Cache'e kaydet (10 dakika)
+      // Save cache (10m)
       await cacheService.set(cacheKey, template, 600);
 
       res.json({
@@ -117,7 +117,7 @@ module.exports = {
         icon: icon.trim(),
       });
 
-      // Cache'i temizle
+      // Clean cache
       await cacheService.deletePattern("section:templates:*");
 
       // Audit log
@@ -157,7 +157,7 @@ module.exports = {
         });
       }
 
-      // Name uniqueness check (kendisi hariç)
+      // Name uniqueness check
       if (updates.name || updates.slug) {
         const existingTemplate = await SectionTemplate.findOne({
           $or: [
@@ -185,7 +185,7 @@ module.exports = {
 
       await template.save();
 
-      // Cache'i temizle
+      // clean cache
       await cacheService.deletePattern("section:templates:*");
 
       // Audit log
@@ -241,7 +241,7 @@ module.exports = {
       template.isActive = false;
       await template.save();
 
-      // Cache'i temizle
+      // Clean cache
       await cacheService.deletePattern("section:templates:*");
 
       // Audit log

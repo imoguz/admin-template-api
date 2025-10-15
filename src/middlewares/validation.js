@@ -13,7 +13,7 @@ const validate = (schema, source = "body") => {
       const { error, value } = schema.validate(req[source], {
         abortEarly: false,
         stripUnknown: true,
-        convert: true, // Type conversion
+        convert: true,
         allowUnknown: false, // Unknown fields not allowed
       });
 

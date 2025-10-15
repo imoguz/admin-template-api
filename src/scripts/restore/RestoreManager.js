@@ -23,7 +23,6 @@ class RestoreManager {
     for (const dir of directories) {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
-        this.log(`📁 Created directory: ${dir}`);
       }
     }
   }
@@ -35,15 +34,12 @@ class RestoreManager {
         api_key: process.env.CLOUDINARY_API_KEY,
         api_secret: process.env.CLOUDINARY_API_SECRET,
       });
-      this.log("☁️ Cloudinary configured");
     }
   }
 
   log(message, type = "INFO") {
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] ${type}: ${message}`;
-
-    console.log(logMessage);
 
     try {
       const logFile = path.join(
@@ -60,29 +56,21 @@ class RestoreManager {
     const restoreId = this.generateRestoreId();
     const tempRestorePath = path.join(this.tempDir, `restore-${restoreId}`);
 
-    this.log(`🚀 Starting restore process: ${restoreId}`);
-    this.log(`📦 Backup source: ${backupSource}`);
+    this.log(`Starting restore process: ${restoreId}`);
+    this.log(`Backup source: ${backupSource}`);
 
     try {
-      // 1. Backup dosyasını bul ve çıkar
       const backupInfo = await this.locateAndExtractBackup(
         backupSource,
         tempRestorePath
       );
-
-      // 2. Backup metadata'sını doğrula
       const metadata = await this.validateBackupMetadata(tempRestorePath);
 
-      // 3. Hedef veritabanını belirle
       const targetDatabase = options.restoreToDatabase || metadata.database;
-      this.log(`🎯 Target database: ${targetDatabase}`);
+      this.log(`Target database: ${targetDatabase}`);
 
-      // 4. Restore öncesi snapshot
-      const preRestoreSnapshot = await this.createPreRestoreSnapshot(
-        targetDatabase
-      );
+      await this.createPreRestoreSnapshot(targetDatabase);
 
-      // 5. MongoDB restore işlemi
       const restoreResult = await this.executeMongoRestore(
         tempRestorePath,
         metadata.database,
@@ -90,12 +78,10 @@ class RestoreManager {
         options
       );
 
-      // 6. Doğrulama
       if (!options.skipVerification) {
         await this.verifyRestore(restoreResult, targetDatabase);
       }
 
-      // 7. Sonuçları hazırla
       const result = {
         success: true,
         restoreId,
@@ -108,10 +94,10 @@ class RestoreManager {
         duration: restoreResult.duration,
       };
 
-      this.log(`✅ Restore completed successfully`);
+      this.log(`Restore completed successfully`);
       return result;
     } catch (error) {
-      this.log(`❌ Restore failed: ${error.message}`, "ERROR");
+      this.log(`Restore failed: ${error.message}`, "ERROR");
       return {
         success: false,
         error: error.message,
@@ -123,7 +109,7 @@ class RestoreManager {
   }
 
   async locateAndExtractBackup(backupSource, extractPath) {
-    this.log(`🔍 Locating backup: ${backupSource}`);
+    this.log(`Locating backup: ${backupSource}`);
 
     let backupPath;
 
@@ -143,7 +129,7 @@ class RestoreManager {
       throw new Error(`Backup not found: ${backupSource}`);
     }
 
-    this.log(`📦 Extracting: ${path.basename(backupPath)}`);
+    this.log(`Extracting: ${path.basename(backupPath)}`);
     await decompressFolder(backupPath, extractPath);
 
     this.validateExtractedStructure(extractPath);
@@ -166,13 +152,13 @@ class RestoreManager {
       .sort()
       .reverse();
 
-    this.log(`📊 Found ${backupFiles.length} backup files`);
+    this.log(`Found ${backupFiles.length} backup files`);
 
     let selectedBackup;
 
     if (backupIdentifier === "latest") {
       selectedBackup = backupFiles[0];
-      this.log(`⏰ Using latest backup: ${selectedBackup}`);
+      this.log(`Using latest backup: ${selectedBackup}`);
     } else {
       selectedBackup = backupFiles.find(
         (file) => file === backupIdentifier || file.includes(backupIdentifier)
@@ -192,12 +178,12 @@ class RestoreManager {
       throw new Error(`Backup file missing: ${fullPath}`);
     }
 
-    this.log(`✅ Selected backup: ${selectedBackup}`);
+    this.log(`Selected backup: ${selectedBackup}`);
     return fullPath;
   }
 
   async downloadFromCloudinary(source, downloadDir) {
-    this.log(`☁️ Downloading from Cloudinary: ${source}`);
+    this.log(`Downloading from Cloudinary: ${source}`);
 
     try {
       const publicId = this.extractPublicId(source);
@@ -205,7 +191,7 @@ class RestoreManager {
       const outputPath = path.join(downloadDir, `${publicId}.tar.gz`);
 
       await this.downloadFile(downloadUrl, outputPath);
-      this.log(`✅ Download completed: ${outputPath}`);
+      this.log(`Download completed: ${outputPath}`);
 
       return outputPath;
     } catch (error) {
@@ -260,7 +246,7 @@ class RestoreManager {
       throw new Error("No database folders found in backup");
     }
 
-    this.log(`📁 Found databases: ${dbFolders.join(", ")}`);
+    this.log(`Found databases: ${dbFolders.join(", ")}`);
   }
 
   async validateBackupMetadata(backupPath) {
@@ -279,8 +265,8 @@ class RestoreManager {
       }
     }
 
-    this.log(`📋 Backup: ${metadata.database} @ ${metadata.timestamp}`);
-    this.log(`📋 Version: ${metadata.version}`);
+    this.log(`Backup: ${metadata.database} @ ${metadata.timestamp}`);
+    this.log(`Version: ${metadata.version}`);
 
     return metadata;
   }
@@ -300,11 +286,9 @@ class RestoreManager {
 
     const uri = this.buildMongoURI(targetDatabase);
 
-    const commandParts = [
+    let commandParts = [
       "mongorestore",
       `--uri="${uri}"`,
-      `--nsFrom="${sourceDatabase}.*"`,
-      `--nsTo="${targetDatabase}.*"`,
       `--dir="${sourceDbPath}"`,
       `--gzip`,
       options.dropCollections ? "--drop" : "",
@@ -312,12 +296,24 @@ class RestoreManager {
       "--numInsertionWorkersPerCollection=4",
       "--stopOnError",
       "--maintainInsertionOrder",
-    ].filter(Boolean);
+    ];
+
+    if (options.collections && options.collections.length > 0) {
+      options.collections.forEach((collection) => {
+        commandParts.push(`--nsInclude="${sourceDatabase}.${collection}"`);
+      });
+      this.log(`Selective restore: ${options.collections.join(", ")}`);
+    } else if (options.nsInclude) {
+      commandParts.push(`--nsInclude="${options.nsInclude}"`);
+      this.log(`Namespace include: ${options.nsInclude}`);
+    } else {
+      commandParts.push(`--nsFrom="${sourceDatabase}.*"`);
+      commandParts.push(`--nsTo="${targetDatabase}.*"`);
+    }
 
     const command = commandParts.join(" ");
 
-    this.log(`🔄 Restoring directory: ${sourceDatabase} → ${targetDatabase}`);
-    this.log(`🔧 Command: ${command.substring(0, 100)}...`);
+    this.log(`Restoring: ${sourceDatabase} → ${targetDatabase}`);
 
     try {
       execSync(command, {
@@ -326,14 +322,19 @@ class RestoreManager {
         maxBuffer: 50 * 1024 * 1024,
       });
 
-      // Restore tamamlandı, MongoDB'den koleksiyon ve document sayılarını al
       const db = mongoose.connection.db;
-      const collections = await db.listCollections().toArray();
+      let collectionsToCheck;
+
+      if (options.collections && options.collections.length > 0) {
+        collectionsToCheck = options.collections.map((name) => ({ name }));
+      } else {
+        collectionsToCheck = await db.listCollections().toArray();
+      }
 
       const collectionsRestored = [];
       let totalDocuments = 0;
 
-      for (const coll of collections) {
+      for (const coll of collectionsToCheck) {
         try {
           const count = await db.collection(coll.name).countDocuments();
           collectionsRestored.push({
@@ -358,9 +359,8 @@ class RestoreManager {
       };
 
       this.log(
-        `✅ Restore completed: ${result.collections.length} collections, ${result.documents} documents`
+        `Restore completed: ${result.collections.length} collections, ${result.documents} documents`
       );
-
       return result;
     } catch (error) {
       throw new Error(
@@ -406,16 +406,16 @@ class RestoreManager {
         }
       }
 
-      this.log(`📸 Pre-restore snapshot: ${collections.length} collections`);
+      this.log(`Pre-restore snapshot: ${collections.length} collections`);
       return snapshot;
     } catch (error) {
-      this.log("⚠️ Could not create pre-restore snapshot", "WARN");
+      this.log("Could not create pre-restore snapshot", "WARN");
       return null;
     }
   }
 
   async verifyRestore(restoreResult, targetDatabase) {
-    this.log("🔍 Verifying restore...");
+    this.log("Verifying restore...");
 
     const db = mongoose.connection.db;
     let verified = 0;
@@ -429,25 +429,21 @@ class RestoreManager {
             verified++;
           } else {
             this.log(
-              `⚠️ Count mismatch: ${coll.name} (expected ${coll.documents}, got ${count})`,
+              `Count mismatch: ${coll.name} (expected ${coll.documents}, got ${count})`,
               "WARN"
             );
           }
         } catch (error) {
-          this.log(
-            `⚠️ Could not verify ${coll.name}: ${error.message}`,
-            "WARN"
-          );
+          this.log(`Could not verify ${coll.name}: ${error.message}`, "WARN");
         }
       }
     }
 
     this.log(
-      `✅ Verification: ${verified}/${restoreResult.collections.length} collections`
+      `Verification: ${verified}/${restoreResult.collections.length} collections`
     );
   }
 
-  // Yardımcı fonksiyonlar
   generateRestoreId() {
     return new Date().toISOString().replace(/[:.]/g, "-");
   }
@@ -496,9 +492,9 @@ class RestoreManager {
     if (fs.existsSync(tempPath)) {
       try {
         fs.rmSync(tempPath, { recursive: true, force: true });
-        this.log("🧹 Cleaned temp directory");
+        this.log("Cleaned temp directory");
       } catch (error) {
-        this.log(`⚠️ Could not clean temp directory: ${error.message}`, "WARN");
+        this.log(`Could not clean temp directory: ${error.message}`, "WARN");
       }
     }
   }

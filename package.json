@@ -17,7 +17,12 @@
     "restore:latest": "node src/scripts/restore.js latest",
     "restore:latest-drop": "node src/scripts/restore.js latest --drop",
     "restore:dry-run": "node src/scripts/restore.js latest --drop --skip-verify",
-    "restore:list": "node src/scripts/restore.js --list"
+    "restore:list": "node src/scripts/restore.js --list",
+    "restore:projects": "node src/scripts/restore.js latest --nsInclude=\"landing-template.projects\" --drop",
+    "restore:cloudinary:latest": "node src/scripts/restore.js cloudinary:latest --drop",
+    "restore:cloudinary:list": "node src/scripts/restore.js cloudinary:list",
+    "restore:cloudinary:projects": "node src/scripts/restore.js cloudinary:latest --nsInclude=\"landing-template.projects\" --drop",
+    "restore:cloudinary:safe": "node src/scripts/restore.js cloudinary:latest"
   },
   "keywords": [],
   "author": "",

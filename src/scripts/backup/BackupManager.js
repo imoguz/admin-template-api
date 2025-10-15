@@ -43,7 +43,6 @@ class BackupManager {
 
     console.log(logMessage.trim());
 
-    // Log dosyasına yaz
     const logFile = path.join(
       this.logsDir,
       `backup-${new Date().toISOString().split("T")[0]}.log`
@@ -52,7 +51,6 @@ class BackupManager {
   }
 
   async createComprehensiveBackup() {
-    // ✅ Geliştirilmiş timestamp formatı
     const now = new Date();
     const timestamp = `${now.getFullYear()}${String(
       now.getMonth() + 1
@@ -66,28 +64,21 @@ class BackupManager {
     this.backupPath = backupPath;
 
     try {
-      this.log(`🚀 Starting comprehensive backup: ${backupName}`);
+      this.log(`Starting backup: ${backupName}`);
 
-      // 1. MongoDB Dump
       const mongoResult = await this.createMongoDBDump(backupPath);
-
-      // 2. Metadata toplama
       const metadata = await this.collectSystemMetadata(backupPath, backupName);
 
-      // 3. Cloudinary Metadata Backup
       const cloudinaryMetadata = await this.backupCloudinaryMetadata(
         backupPath
       );
       metadata.cloudinary = cloudinaryMetadata;
 
-      // 4. Application Config Backup
       await this.backupApplicationConfig(backupPath);
 
-      // 5. Sıkıştırma
       const compressedPath = await this.compressBackup(backupPath, backupName);
       this.compressedPath = compressedPath;
 
-      // 6. Cloudinary'e yükleme (non-fatal)
       let cloudinaryResult = null;
       if (this.uploadToCloudinary) {
         try {
@@ -96,10 +87,7 @@ class BackupManager {
             backupName
           );
         } catch (error) {
-          this.log(
-            `⚠️ Cloudinary upload failed, continuing with local backup only: ${error.message}`,
-            "WARN"
-          );
+          this.log(`Cloudinary upload failed: ${error.message}`, "WARN");
           cloudinaryResult = {
             success: false,
             error: error.message,
@@ -108,13 +96,8 @@ class BackupManager {
         }
       }
 
-      // 7. Temizlik
       fs.rmSync(backupPath, { recursive: true, force: true });
-
-      // 8. Retention policy (gerçek gün bazlı)
       this.applyRetentionPolicy();
-
-      // 9. Doğrulama
       await this.verifyBackupIntegrity(compressedPath, metadata);
 
       const result = {
@@ -126,12 +109,12 @@ class BackupManager {
         timestamp: new Date().toISOString(),
       };
 
-      this.log(`✅ Backup completed successfully: ${backupName}.tar.gz`);
+      this.log(`Backup completed: ${backupName}.tar.gz`);
       await this.sendBackupNotification(result, "SUCCESS");
 
       return result;
     } catch (error) {
-      this.log(`❌ Backup failed: ${error.message}`, "ERROR");
+      this.log(`Backup failed: ${error.message}`, "ERROR");
       await this.sendBackupNotification({ error: error.message }, "FAILED");
       return { success: false, error: error.message };
     }
@@ -139,7 +122,6 @@ class BackupManager {
 
   async createMongoDBDump(backupPath) {
     const uri = process.env.MONGODB;
-
     if (!uri) {
       throw new Error("MONGODB environment variable is required");
     }
@@ -147,18 +129,18 @@ class BackupManager {
     const dbName = this.extractDbName(uri);
     const command = `mongodump --uri="${uri}" --out="${backupPath}" --gzip --verbose`;
 
-    this.log(`📦 Executing MongoDB dump for database: ${dbName}`);
+    this.log(`Executing MongoDB dump for database: ${dbName}`);
 
     try {
       const output = execSync(command, {
         encoding: "utf8",
         stdio: ["pipe", "pipe", "pipe"],
-        maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large dumps
+        maxBuffer: 50 * 1024 * 1024,
       });
 
       const analysis = this.analyzeMongoDump(output, backupPath, dbName);
       this.log(
-        `📊 MongoDB dump completed: ${analysis.collections.length} collections, ${analysis.totalSize}`
+        `MongoDB dump completed: ${analysis.collections.length} collections, ${analysis.totalSize}`
       );
 
       return analysis;
@@ -171,33 +153,22 @@ class BackupManager {
   analyzeMongoDump(output, backupPath, dbName) {
     const collections = [];
     let totalSize = 0;
-    let gzFiles = []; // ✅ Değişkeni burada tanımla
+    let gzFiles = [];
 
-    // ✅ Geliştirilmiş çıktı analizi
     const lines = output.split("\n");
 
     lines.forEach((line) => {
-      // Farklı mongodump çıktı formatlarını yakala
       if (line.includes("writing") || line.includes("done dumping")) {
         let collectionName = null;
 
-        // Pattern 1: "writing landing-template.projects to"
         const pattern1 = line.match(/writing\s+[\w-]+\.(\w+)\s+to/);
-        if (pattern1) {
-          collectionName = pattern1[1];
-        }
+        if (pattern1) collectionName = pattern1[1];
 
-        // Pattern 2: "done dumping landing-template.projects (1 document)"
         const pattern2 = line.match(/done dumping\s+[\w-]+\.(\w+)\s+\(/);
-        if (pattern2) {
-          collectionName = pattern2[1];
-        }
+        if (pattern2) collectionName = pattern2[1];
 
-        // Pattern 3: "landing-template.projects to"
         const pattern3 = line.match(/[\w-]+\.(\w+)\s+to/);
-        if (pattern3 && !collectionName) {
-          collectionName = pattern3[1];
-        }
+        if (pattern3 && !collectionName) collectionName = pattern3[1];
 
         if (collectionName && !collections.includes(collectionName)) {
           collections.push(collectionName);
@@ -205,16 +176,13 @@ class BackupManager {
       }
     });
 
-    // ✅ Geliştirilmiş: Tüm .gz dosyalarını dahil et (metadata.json.gz dahil)
     const dbPath = path.join(backupPath, dbName);
     if (fs.existsSync(dbPath)) {
       const files = fs.readdirSync(dbPath);
-      gzFiles = files.filter((f) => f.endsWith(".gz")); // ✅ Artık tanımlı
+      gzFiles = files.filter((f) => f.endsWith(".gz"));
 
-      // Eğer çıktı analizi başarısız olduysa, dosyalardan koleksiyon isimlerini al
       if (collections.length === 0 && gzFiles.length > 0) {
         gzFiles.forEach((file) => {
-          // Sadece .bson.gz dosyalarından koleksiyon ismi çıkar
           if (file.endsWith(".bson.gz")) {
             const collectionName = file.replace(".bson.gz", "");
             if (!collections.includes(collectionName)) {
@@ -224,27 +192,22 @@ class BackupManager {
         });
       }
 
-      // ✅ TÜM .gz dosyalarının boyutlarını hesapla (metadata dahil)
       gzFiles.forEach((file) => {
         const filePath = path.join(dbPath, file);
         try {
           const stats = fs.statSync(filePath);
           totalSize += stats.size;
         } catch (err) {
-          this.log(`⚠️ Could not stat file ${file}: ${err.message}`, "WARN");
+          this.log(`Could not stat file ${file}: ${err.message}`, "WARN");
         }
       });
     }
 
     this.log(
-      `🔍 Dump analysis: Found ${collections.length} collections, ${
+      `Dump analysis: ${collections.length} collections, ${
         gzFiles ? gzFiles.length : 0
-      } files, total size: ${this.formatBytes(totalSize)}`
+      } files, ${this.formatBytes(totalSize)}`
     );
-
-    if (collections.length > 0) {
-      this.log(`📁 Collections: ${collections.join(", ")}`);
-    }
 
     return {
       collections,
@@ -260,9 +223,8 @@ class BackupManager {
     }
 
     try {
-      this.log(`☁️ Backing up Cloudinary metadata...`);
+      this.log(`Backing up Cloudinary metadata...`);
 
-      // Cloudinary'den resource listesi al
       const result = await cloudinary.api.resources({
         type: "upload",
         prefix: process.env.CLOUDINARY_UPLOAD_FOLDER,
@@ -276,7 +238,6 @@ class BackupManager {
         folder: process.env.CLOUDINARY_UPLOAD_FOLDER,
       };
 
-      // Metadata'yı dosyaya yaz
       const cloudinaryBackupPath = path.join(
         backupPath,
         "cloudinary-metadata.json"
@@ -287,7 +248,7 @@ class BackupManager {
       );
 
       this.log(
-        `✅ Cloudinary metadata backed up: ${result.resources.length} resources`
+        `Cloudinary metadata backed up: ${result.resources.length} resources`
       );
 
       return {
@@ -296,30 +257,19 @@ class BackupManager {
         totalSize: this.formatBytes(JSON.stringify(cloudinaryData).length),
       };
     } catch (error) {
-      this.log(
-        `⚠️ Cloudinary metadata backup failed: ${error.message}`,
-        "WARN"
-      );
-      return {
-        success: false,
-        error: error.message,
-      };
+      this.log(`Cloudinary metadata backup failed: ${error.message}`, "WARN");
+      return { success: false, error: error.message };
     }
   }
 
   async backupApplicationConfig(backupPath) {
     try {
-      // 🔗 Mongo bağlantısı kontrolü
       if (!mongoose.connection || mongoose.connection.readyState !== 1) {
-        this.log("🔄 MongoDB connection not ready, reconnecting...");
-        await mongoose.connect(process.env.MONGODB, {
-          useNewUrlParser: true,
-          useUnifiedTopology: true,
-        });
-        this.log("✅ MongoDB connection established for config snapshot.");
+        this.log("MongoDB connection not ready, reconnecting...");
+        await mongoose.connect(process.env.MONGODB);
+        this.log("MongoDB connection established for config snapshot.");
       }
 
-      // 📊 Koleksiyon istatistiklerini güvenli şekilde al
       const db = mongoose.connection.db;
       const collections = await db.listCollections().toArray();
       const collectionStats = {};
@@ -330,18 +280,17 @@ class BackupManager {
           collectionStats[coll.name] = count;
         } catch (err) {
           this.log(
-            `⚠️ Failed to count documents for collection ${coll.name}: ${err.message}`,
+            `Failed to count documents for ${coll.name}: ${err.message}`,
             "WARN"
           );
         }
       }
 
-      // ⚙️ Uygulama konfigürasyonu snapshot'ı
       const config = {
         environment: process.env.NODE_ENV,
         nodeVersion: process.version,
         platform: process.platform,
-        backupVersion: "2.3.0", // Versiyonu güncelledik
+        backupVersion: "2.3.0",
         timestamp: new Date().toISOString(),
         collections: collectionStats,
         cloudinary: {
@@ -354,31 +303,29 @@ class BackupManager {
         },
       };
 
-      // 📝 Dosyaya yaz
       const configPath = path.join(backupPath, "application-config.json");
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
       this.log(
-        `⚙️ Application config backed up (${
+        `Application config backed up (${
           Object.keys(collectionStats).length
         } collections)`
       );
       return config;
     } catch (error) {
-      this.log(`⚠️ Application config backup failed: ${error.message}`, "WARN");
+      this.log(`Application config backup failed: ${error.message}`, "WARN");
       return { error: error.message };
     }
   }
 
   async checkRedisConnection() {
     try {
-      // ✅ Redis modülünü opsiyonel hale getirdik
       const redis = require("../../configs/redis");
       const client = redis.getClient();
       await client.ping();
       return true;
     } catch (error) {
-      this.log(`⚠️ Redis connection check failed: ${error.message}`, "WARN");
+      this.log(`Redis connection check failed: ${error.message}`, "WARN");
       return false;
     }
   }
@@ -391,7 +338,7 @@ class BackupManager {
       timestamp: new Date().toISOString(),
       database: dbName,
       environment: process.env.NODE_ENV,
-      version: "2.3.0", // Versiyonu güncelledik
+      version: "2.3.0",
       system: {
         platform: process.platform,
         nodeVersion: process.version,
@@ -408,14 +355,13 @@ class BackupManager {
   async compressBackup(backupPath, backupName) {
     const outputFile = path.join(this.backupDir, `${backupName}.tar.gz`);
 
-    this.log(`🗜️ Compressing backup...`);
+    this.log(`Compressing backup...`);
     await compressFolder(backupPath, outputFile);
 
-    // ✅ Sıkıştırmanın tamamlanmasını garantilemek için küçük bekleme
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     const stats = fs.statSync(outputFile);
-    this.log(`📦 Compression completed: ${this.formatBytes(stats.size)}`);
+    this.log(`Compression completed: ${this.formatBytes(stats.size)}`);
 
     return outputFile;
   }
@@ -426,7 +372,7 @@ class BackupManager {
     }
 
     try {
-      this.log(`☁️ Uploading to Cloudinary...`);
+      this.log(`Uploading to Cloudinary...`);
 
       const result = await cloudinary.uploader.upload(filePath, {
         resource_type: "raw",
@@ -436,7 +382,7 @@ class BackupManager {
         tags: ["database-backup", "automated"],
       });
 
-      this.log(`✅ Uploaded to Cloudinary: ${result.secure_url}`);
+      this.log(`Uploaded to Cloudinary: ${result.secure_url}`);
 
       return {
         success: true,
@@ -446,8 +392,8 @@ class BackupManager {
         format: result.format,
       };
     } catch (error) {
-      this.log(`❌ Cloudinary upload failed: ${error.message}`, "ERROR");
-      throw error; // Bu artık ana fonksiyonda yakalanacak
+      this.log(`Cloudinary upload failed: ${error.message}`, "ERROR");
+      throw error;
     }
   }
 
@@ -472,26 +418,23 @@ class BackupManager {
     toDelete.forEach((file) => {
       try {
         fs.unlinkSync(file.path);
-        this.log(
-          `🗑️ Deleted old backup (${this.retentionDays} days+): ${file.name}`
-        );
+        this.log(`Deleted old backup: ${file.name}`);
       } catch (error) {
-        this.log(`⚠️ Could not delete ${file.name}: ${error.message}`, "WARN");
+        this.log(`Could not delete ${file.name}: ${error.message}`, "WARN");
       }
     });
 
     if (toDelete.length > 0) {
       this.log(
-        `🔄 Retention: Deleted ${toDelete.length} backups older than ${this.retentionDays} days`
+        `Retention: Deleted ${toDelete.length} backups older than ${this.retentionDays} days`
       );
     }
   }
 
   async verifyBackupIntegrity(backupPath, metadata) {
-    this.log(`🔍 Verifying backup integrity...`);
+    this.log(`Verifying backup integrity...`);
 
     try {
-      // ✅ Dosyanın tamamen yazılmasını bekleyelim
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       const stats = fs.statSync(backupPath);
@@ -500,24 +443,19 @@ class BackupManager {
         throw new Error("Backup file is empty");
       }
 
-      // Basic checks
       if (stats.size < 1024) {
-        // 1KB'den küçükse şüpheli
-        this.log("⚠️ Warning: Backup file seems unusually small", "WARN");
+        this.log("Warning: Backup file seems unusually small", "WARN");
       }
 
-      this.log(
-        `✅ Backup verification passed: ${this.formatBytes(stats.size)}`
-      );
+      this.log(`Backup verification passed: ${this.formatBytes(stats.size)}`);
       return true;
     } catch (error) {
-      this.log(`❌ Backup verification failed: ${error.message}`, "ERROR");
+      this.log(`Backup verification failed: ${error.message}`, "ERROR");
       throw error;
     }
   }
 
   async sendBackupNotification(result, status) {
-    // Basit log tabanlı notification
     const notification = {
       status,
       timestamp: new Date().toISOString(),
@@ -526,20 +464,14 @@ class BackupManager {
     };
 
     if (status === "SUCCESS") {
-      this.log(`📧 Backup notification: SUCCESS - ${result.backup}`);
+      this.log(`Backup notification: SUCCESS - ${result.backup}`);
     } else {
-      this.log(`🚨 Backup notification: FAILED - ${result.error}`, "ERROR");
+      this.log(`Backup notification: FAILED - ${result.error}`, "ERROR");
     }
-
-    // Burada email, slack vs. entegrasyonları eklenebilir
   }
 
-  // Utility methods
   extractDbName(uri) {
-    // Önce environment variable'dan kontrol et
     if (process.env.MONGODB_NAME) return process.env.MONGODB_NAME;
-
-    // Sonra URI'dan çıkar
     const match = uri.match(/\/([^/?]+)(?:\?|$)/);
     return match ? match[1] : "landing-template";
   }

@@ -3,7 +3,6 @@
 const Joi = require("joi");
 
 const envVarsSchema = Joi.object({
-  // Required
   NODE_ENV: Joi.string()
     .valid("development", "production", "test")
     .default("development"),
@@ -28,11 +27,9 @@ const envVarsSchema = Joi.object({
   REDIS_PASSWORD: Joi.string().optional().allow(""),
   REDIS_DB: Joi.number().default(0),
 
-  // Optional with defaults
   ALLOWED_ORIGINS: Joi.string().optional(),
   LOGFOLDER: Joi.string().default("./logs"),
 
-  // Cloudinary (optional)
   CLOUDINARY_CLOUD_NAME: Joi.string().optional(),
   CLOUDINARY_API_KEY: Joi.string().optional(),
   CLOUDINARY_API_SECRET: Joi.string().optional(),
@@ -44,7 +41,7 @@ if (error) {
   throw new Error(`Environment validation error: ${error.message}`);
 }
 
-// Akıllı Redis URL seçimi
+// Select Redis URL
 if (!envVars.REDIS_URL) {
   if (envVars.NODE_ENV === "production") {
     envVars.REDIS_URL = envVars.REDIS_URL_PRODUCTION;
@@ -53,7 +50,7 @@ if (!envVars.REDIS_URL) {
   }
 }
 
-// Password'u URL'ye ekle
+// Add password to URL
 if (envVars.REDIS_PASSWORD && envVars.REDIS_PASSWORD !== "") {
   const url = new URL(envVars.REDIS_URL);
   url.username = "default";
@@ -61,9 +58,9 @@ if (envVars.REDIS_PASSWORD && envVars.REDIS_PASSWORD !== "") {
   envVars.REDIS_URL = url.toString();
 }
 
-console.log("✅ Environment variables validated successfully");
-console.log(`📍 Environment: ${envVars.NODE_ENV}`);
-console.log(`🗄️  Database: ${envVars.MONGODB ? "Configured" : "Missing"}`);
-console.log(`🔮 Redis: ${envVars.REDIS_URL.replace(/:[^:]*?@/, ":****@")}`);
+console.log("Environment variables validated successfully");
+console.log(`Environment: ${envVars.NODE_ENV}`);
+console.log(`Database: ${envVars.MONGODB ? "Configured" : "Missing"}`);
+console.log(`Redis: ${envVars.REDIS_URL.replace(/:[^:]*?@/, ":****@")}`);
 
 module.exports = envVars;

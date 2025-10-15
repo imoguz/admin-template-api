@@ -18,7 +18,7 @@ class RedisManager {
           lazyConnect: true,
           reconnectStrategy: (retries) => {
             if (retries > 10) {
-              console.log("🔴 Redis: Too many retries");
+              console.log("Redis: Too many retries");
               return false;
             }
             return Math.min(retries * 100, 3000);
@@ -30,28 +30,28 @@ class RedisManager {
       this.client = redis.createClient(redisOptions);
 
       this.client.on("connect", () => {
-        console.log("🟡 Redis: Connecting...");
+        console.log("Redis: Connecting...");
       });
 
       this.client.on("ready", () => {
         this.isConnected = true;
-        console.log("✅ Redis: Connected and ready");
+        console.log("Redis: Connected and ready");
       });
 
       this.client.on("error", (err) => {
         this.isConnected = false;
-        console.log("❌ Redis error:", err.message);
+        console.log("Redis error:", err.message);
       });
 
       this.client.on("end", () => {
         this.isConnected = false;
-        console.log("🔴 Redis: Connection closed");
+        console.log("Redis: Connection closed");
       });
 
       await this.client.connect();
       return this.client;
     } catch (error) {
-      console.error("❌ Failed to connect to Redis:", error.message);
+      console.error("Failed to connect to Redis:", error.message);
       throw error;
     }
   }

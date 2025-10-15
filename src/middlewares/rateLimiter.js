@@ -18,10 +18,10 @@ const getClientIP = (req) => {
 
 // Genel API limiter
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 dakika
+  windowMs: 15 * 60 * 1000, // 15m
   max: (req) => {
-    if (req.path.startsWith("/health")) return 0; // Health check için limit yok
-    return 100; // IP başına 100 istek
+    if (req.path.startsWith("/health")) return 0;
+    return 100; // 100 req per IP
   },
   message: {
     error: true,
@@ -37,8 +37,8 @@ const globalLimiter = rateLimit({
 
 // Auth-specific limiter
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 dakika
-  max: 10, // IP başına 10 login attempt
+  windowMs: 15 * 60 * 1000, // 15m
+  max: 10, // 10 login attempt per IP
   message: {
     error: true,
     message: "Too many authentication attempts. Try again after 15 minutes.",
@@ -53,7 +53,7 @@ const authLimiter = rateLimit({
 
 // Strict limiter for critical operations
 const strictLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 saat
+  windowMs: 60 * 60 * 1000, // 1 h
   max: 20,
   message: {
     error: true,

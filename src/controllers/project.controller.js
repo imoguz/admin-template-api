@@ -33,7 +33,7 @@ module.exports = {
     try {
       const { title, slug, description } = req.body;
 
-      // Ek slug validation
+      // slug validation
       if (!validateSlug(slug)) {
         return res.status(400).json({
           error:
@@ -41,7 +41,7 @@ module.exports = {
         });
       }
 
-      // Slug uniqueness check - sanitize edilmiş haliyle kontrol et
+      // Slug uniqueness check - sanitize
       const cleanSlug = safeSanitize(slug).toLowerCase();
       const existingProject = await Project.findOne({
         slug: cleanSlug,
@@ -128,7 +128,7 @@ module.exports = {
       const { title, slug, description } = req.body;
       const updates = {};
 
-      // Sadece provided field'ları güncelle
+      // Update only provided fields
       if (title !== undefined) updates.title = safeSanitize(title);
       if (slug !== undefined) updates.slug = safeSanitize(slug).toLowerCase();
       if (description !== undefined)
@@ -219,7 +219,7 @@ module.exports = {
         data = {};
       }
 
-      // String ise JSON parse etmeye çalış
+      // if string parse JSON
       if (typeof data === "string") {
         try {
           if (data.trim() === "") {

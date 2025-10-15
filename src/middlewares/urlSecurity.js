@@ -2,14 +2,13 @@
 
 const validator = require("validator");
 
-// URL güvenlik middleware'i
 const urlSecurity = (req, res, next) => {
   try {
-    // URL parametrelerini kontrol et
+    // Check URL parameters
     const checkUrlParams = (params) => {
       for (const [key, value] of Object.entries(params)) {
         if (typeof value === "string") {
-          // URL injection attempt'leri kontrol et
+          // Check URL injection attempt
           if (
             value.includes("../") ||
             value.includes("file://") ||
@@ -24,7 +23,7 @@ const urlSecurity = (req, res, next) => {
             });
           }
 
-          // URL decode ve tekrar kontrol et
+          // URL decode
           try {
             const decoded = decodeURIComponent(value);
             if (
@@ -39,21 +38,21 @@ const urlSecurity = (req, res, next) => {
               });
             }
           } catch (e) {
-            // Invalid URL encoding - sadece logla, blocklama
+            // Invalid URL encoding
             console.warn("Invalid URL encoding detected:", value);
           }
         }
       }
     };
 
-    // Tüm URL component'larını kontrol et
+    // Check URL components
     const paramsCheck = checkUrlParams(req.params);
     if (paramsCheck) return paramsCheck;
 
     const queryCheck = checkUrlParams(req.query);
     if (queryCheck) return queryCheck;
 
-    // Redirect URL'lerini kontrol et (eğer varsa ve tanımlanmışsa)
+    // Check Redirect URLs
     if (req.body && req.body.redirectUrl) {
       if (
         !validator.isURL(req.body.redirectUrl, {

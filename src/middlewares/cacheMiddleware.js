@@ -60,9 +60,7 @@ const invalidateCache = (patterns = []) => {
           for (const pattern of patterns) {
             await cacheService.deletePattern(pattern);
           }
-          console.log(
-            `✅ Cache invalidated for patterns: ${patterns.join(", ")}`
-          );
+          console.log(`Cache invalidated for patterns: ${patterns.join(", ")}`);
         } catch (error) {
           console.error("Cache invalidation error:", error);
         }

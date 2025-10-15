@@ -2,7 +2,7 @@
 
 const mongoSanitize = require("express-mongo-sanitize");
 
-// Enhanced NoSQL injection protection - READ-ONLY UYUMLU
+// NoSQL injection protection
 const sanitize = (req, res, next) => {
   try {
     // Body sanitization with deep sanitize
@@ -21,12 +21,12 @@ const sanitize = (req, res, next) => {
       });
     }
 
-    // Query sanitization - READ-ONLY UYUMLU
+    // Query sanitization - READ-ONLY
     if (req.query && Object.keys(req.query).length > 0) {
       const originalQuery = req.query;
       const cleanQuery = {};
 
-      // 🔒 TEHLİKELİ OPERATÖRLER
+      // Dangerous Operators
       const dangerousOperators = [
         "$where",
         "$eval",
@@ -56,13 +56,13 @@ const sanitize = (req, res, next) => {
       ];
 
       for (const [key, value] of Object.entries(originalQuery)) {
-        // 1. Direkt tehlikeli operatör kontrolü
+        // 1. dangerous operators
         if (dangerousOperators.includes(key.toLowerCase())) {
           console.warn(`Blocked dangerous operator: ${key}`);
-          continue; // Bu key'i atla
+          continue;
         }
 
-        // 2. Bracket notation kontrolü
+        // 2. Bracket notation
         if (key.includes("[") && key.includes("]")) {
           const bracketContent = key.match(/\[(.*?)\]/);
           if (
@@ -70,11 +70,11 @@ const sanitize = (req, res, next) => {
             dangerousOperators.includes(bracketContent[1].toLowerCase())
           ) {
             console.warn(`Blocked bracket notation: ${key}`);
-            continue; // Bu key'i atla
+            continue;
           }
         }
 
-        // 3. Dot notation kontrolü
+        // 3. Dot notation
         if (key.includes(".")) {
           const parts = key.split(".");
           if (
@@ -83,7 +83,7 @@ const sanitize = (req, res, next) => {
             )
           ) {
             console.warn(`Blocked dot notation: ${key}`);
-            continue; // Bu key'i atla
+            continue;
           }
         }
 
@@ -104,7 +104,7 @@ const sanitize = (req, res, next) => {
           ];
 
           if (dangerousPatterns.some((pattern) => pattern.test(value))) {
-            // Değeri sanitize et
+            // sanitize value
             cleanQuery[key] = value
               .replace(/\$/g, "_")
               .replace(/sleep\s*\(/gi, "")
@@ -114,11 +114,11 @@ const sanitize = (req, res, next) => {
           }
         }
 
-        // 5. Safe key'leri ekle
+        // 5. Add Safe keys
         cleanQuery[key] = value;
       }
 
-      // 🔧 READ-ONLY ÇÖZÜMÜ: req.query'yi değiştirme, yeni property ekle
+      // READ-ONLY
       req.sanitizedQuery = cleanQuery;
     }
 

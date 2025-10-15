@@ -29,28 +29,23 @@ const deepSanitize = (obj) => {
   return sanitized;
 };
 
-// XSS sanitization middleware
 const xssSanitize = (req, res, next) => {
   try {
-    // Body sanitization - merge ederek orijinal yapıyı koru
+    // Body sanitization
     if (req.body && Object.keys(req.body).length > 0) {
       const sanitizedBody = deepSanitize(req.body);
-      req.body = { ...req.body, ...sanitizedBody }; // 🔧 MERGE YAP
+      req.body = { ...req.body, ...sanitizedBody };
     }
 
-    // Query sanitization - read-only, bu yüzden dikkatli ol
+    // Query sanitization - read-only
     if (req.query && Object.keys(req.query).length > 0) {
       const sanitizedQuery = deepSanitize(req.query);
 
-      // Sanitize edilmiş query'yi req.query'ye assign etmek yerine
-      // individual values'leri güncelle veya yeni property olarak ekle
       Object.keys(sanitizedQuery).forEach((key) => {
-        // Mevcut property'leri güncelle
         if (req.query[key] !== sanitizedQuery[key]) {
           try {
             req.query[key] = sanitizedQuery[key];
           } catch (e) {
-            // Read-only hatası alırsak, farklı bir yaklaşım kullan
             console.warn(
               `Query parameter ${key} is read-only, skipping sanitization`
             );
@@ -59,7 +54,7 @@ const xssSanitize = (req, res, next) => {
       });
     }
 
-    // Params sanitization - read-only, bu yüzden dikkatli ol
+    // Params sanitization - read-only
     if (req.params && Object.keys(req.params).length > 0) {
       Object.keys(req.params).forEach((key) => {
         if (typeof req.params[key] === "string") {

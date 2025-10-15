@@ -1,6 +1,6 @@
 "use strict";
 
-// Tehlikeli MongoDB operatörleri
+// Dangerous MongoDB operators
 const DANGEROUS_OPERATORS = [
   "$where",
   "$eval",
@@ -13,7 +13,7 @@ const DANGEROUS_OPERATORS = [
   "$search",
 ];
 
-// Tehlikeli string pattern'ler
+// Dangerous string patterns
 const DANGEROUS_PATTERNS = [
   "sleep",
   "benchmark",
@@ -26,7 +26,7 @@ const hasDangerousContent = (obj) => {
   if (!obj || typeof obj !== "object") return false;
 
   for (const [key, value] of Object.entries(obj)) {
-    // Key kontrolü
+    // Key check
     if (
       DANGEROUS_OPERATORS.some((op) =>
         key.toLowerCase().includes(op.toLowerCase())
@@ -35,7 +35,7 @@ const hasDangerousContent = (obj) => {
       return true;
     }
 
-    // Value kontrolü
+    // Value check
     if (typeof value === "string") {
       if (
         DANGEROUS_PATTERNS.some((pattern) =>
@@ -46,7 +46,7 @@ const hasDangerousContent = (obj) => {
       }
     }
 
-    // Nested object kontrolü
+    // Check nested object
     if (typeof value === "object" && value !== null) {
       if (hasDangerousContent(value)) {
         return true;
@@ -71,7 +71,7 @@ const queryHandler = (req, res, next) => {
       select = "",
     } = req.query;
 
-    // 🔒 GÜVENLİK KONTROLÜ - Query'de tehlikeli içerik var mı?
+    // security check
     if (hasDangerousContent(req.query)) {
       console.warn(`Blocked dangerous query from IP: ${req.ip}`, req.query);
       return res.status(400).json({
