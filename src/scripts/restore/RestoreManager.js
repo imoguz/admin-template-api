@@ -17,9 +17,6 @@ class RestoreManager {
     this.configureCloudinary();
   }
 
-  /**
-   * Gerekli dizinleri oluştur
-   */
   ensureDirectories() {
     const directories = [this.backupDir, this.tempDir, this.logsDir];
 
@@ -31,9 +28,6 @@ class RestoreManager {
     }
   }
 
-  /**
-   * Cloudinary konfigürasyonu
-   */
   configureCloudinary() {
     if (process.env.CLOUDINARY_CLOUD_NAME) {
       cloudinary.config({
@@ -45,17 +39,12 @@ class RestoreManager {
     }
   }
 
-  /**
-   * Loglama fonksiyonu
-   */
   log(message, type = "INFO") {
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] ${type}: ${message}`;
 
-    // Console'a yaz
     console.log(logMessage);
 
-    // Log dosyasına yaz
     try {
       const logFile = path.join(
         this.logsDir,
@@ -67,9 +56,6 @@ class RestoreManager {
     }
   }
 
-  /**
-   * Ana restore fonksiyonu
-   */
   async createComprehensiveRestore(backupSource, options = {}) {
     const restoreId = this.generateRestoreId();
     const tempRestorePath = path.join(this.tempDir, `restore-${restoreId}`);
@@ -132,20 +118,15 @@ class RestoreManager {
         restoreId,
       };
     } finally {
-      // Geçici dosyaları temizle
       this.cleanupTempDirectory(tempRestorePath);
     }
   }
 
-  /**
-   * Backup dosyasını bul ve çıkar
-   */
   async locateAndExtractBackup(backupSource, extractPath) {
     this.log(`🔍 Locating backup: ${backupSource}`);
 
     let backupPath;
 
-    // Kaynak türünü belirle
     if (
       backupSource.startsWith("http") ||
       backupSource.startsWith("cloudinary:")
@@ -162,11 +143,9 @@ class RestoreManager {
       throw new Error(`Backup not found: ${backupSource}`);
     }
 
-    // Dosyayı çıkar
     this.log(`📦 Extracting: ${path.basename(backupPath)}`);
     await decompressFolder(backupPath, extractPath);
 
-    // Çıkarılan yapıyı kontrol et
     this.validateExtractedStructure(extractPath);
 
     return {
@@ -176,16 +155,11 @@ class RestoreManager {
     };
   }
 
-  /**
-   * Yerel backup dosyasını bul
-   */
   findLocalBackup(backupIdentifier) {
-    // Backup dizinini kontrol et
     if (!fs.existsSync(this.backupDir)) {
       throw new Error(`Backup directory not found: ${this.backupDir}`);
     }
 
-    // Tüm backup dosyalarını listele
     const backupFiles = fs
       .readdirSync(this.backupDir)
       .filter((file) => file.endsWith(".tar.gz"))
@@ -200,7 +174,6 @@ class RestoreManager {
       selectedBackup = backupFiles[0];
       this.log(`⏰ Using latest backup: ${selectedBackup}`);
     } else {
-      // Tam veya kısmi eşleşme ara
       selectedBackup = backupFiles.find(
         (file) => file === backupIdentifier || file.includes(backupIdentifier)
       );
@@ -223,9 +196,6 @@ class RestoreManager {
     return fullPath;
   }
 
-  /**
-   * Cloudinary'den backup indir
-   */
   async downloadFromCloudinary(source, downloadDir) {
     this.log(`☁️ Downloading from Cloudinary: ${source}`);
 
@@ -243,9 +213,6 @@ class RestoreManager {
     }
   }
 
-  /**
-   * Dosya indirme fonksiyonu
-   */
   async downloadFile(url, outputPath) {
     return new Promise((resolve, reject) => {
       const https = require("https");
@@ -272,9 +239,6 @@ class RestoreManager {
     });
   }
 
-  /**
-   * Çıkarılan yapıyı doğrula
-   */
   validateExtractedStructure(extractPath) {
     if (!fs.existsSync(extractPath)) {
       throw new Error("Extraction failed - directory not created");
@@ -282,13 +246,11 @@ class RestoreManager {
 
     const items = fs.readdirSync(extractPath);
 
-    // Metadata dosyasını kontrol et
     const hasMetadata = items.includes("backup-metadata.json");
     if (!hasMetadata) {
       throw new Error("Invalid backup - metadata file missing");
     }
 
-    // Database klasörlerini bul
     const dbFolders = items.filter((item) => {
       const itemPath = path.join(extractPath, item);
       return fs.statSync(itemPath).isDirectory() && item !== "temp";
@@ -301,9 +263,6 @@ class RestoreManager {
     this.log(`📁 Found databases: ${dbFolders.join(", ")}`);
   }
 
-  /**
-   * Backup metadata'sını doğrula
-   */
   async validateBackupMetadata(backupPath) {
     const metadataPath = path.join(backupPath, "backup-metadata.json");
 
@@ -313,7 +272,6 @@ class RestoreManager {
 
     const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
 
-    // Gerekli alanları kontrol et
     const required = ["timestamp", "database", "version"];
     for (const field of required) {
       if (!metadata[field]) {
@@ -327,12 +285,6 @@ class RestoreManager {
     return metadata;
   }
 
-  /**
-   * MongoDB restore işlemi
-   */
-  /**
-   * MongoDB restore işlemi - Directory-based (Daha güvenli)
-   */
   async executeMongoRestore(
     backupPath,
     sourceDatabase,
@@ -348,7 +300,6 @@ class RestoreManager {
 
     const uri = this.buildMongoURI(targetDatabase);
 
-    // ✅ Directory-based restore komutu
     const commandParts = [
       "mongorestore",
       `--uri="${uri}"`,
@@ -369,14 +320,13 @@ class RestoreManager {
     this.log(`🔧 Command: ${command.substring(0, 100)}...`);
 
     try {
-      // Restore işlemini çalıştır
       execSync(command, {
         encoding: "utf8",
         stdio: ["pipe", "pipe", "pipe"],
         maxBuffer: 50 * 1024 * 1024,
       });
 
-      // Restore tamamlandı, şimdi MongoDB'den koleksiyon ve document sayılarını al
+      // Restore tamamlandı, MongoDB'den koleksiyon ve document sayılarını al
       const db = mongoose.connection.db;
       const collections = await db.listCollections().toArray();
 
@@ -419,166 +369,9 @@ class RestoreManager {
     }
   }
 
-  /**
-   * Tek bir koleksiyonu restore et
-   */
-  async restoreCollection(
-    dbPath,
-    bsonFile,
-    sourceDatabase,
-    targetDatabase,
-    options
-  ) {
-    const collectionName = bsonFile.replace(".bson.gz", "");
-    const filePath = path.join(dbPath, bsonFile);
-
-    const command = this.buildRestoreCommand(
-      filePath,
-      sourceDatabase,
-      targetDatabase,
-      collectionName,
-      options
-    );
-
-    this.log(
-      `🔧 Restoring: ${sourceDatabase}.${collectionName} → ${targetDatabase}.${collectionName}`
-    );
-
-    try {
-      const output = execSync(command, {
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "pipe"],
-        maxBuffer: 50 * 1024 * 1024,
-      });
-
-      const documents = this.parseDocumentCount(output);
-
-      this.log(`✅ ${collectionName}: ${documents} documents`);
-
-      return {
-        name: collectionName,
-        documents: documents,
-        status: "success",
-      };
-    } catch (error) {
-      throw new Error(this.analyzeMongoError(error));
-    }
-  }
-
-  /**
-   * MongoDB restore komutu oluştur - GÜNCELLENDİ!
-   */
-  buildRestoreCommand(
-    filePath,
-    sourceDatabase,
-    targetDatabase,
-    collectionName,
-    options
-  ) {
-    const uri = this.buildMongoURI(targetDatabase);
-
-    // ✅ MongoDB 6.0+ uyumlu komut
-    const commandParts = [
-      "mongorestore",
-      `--uri="${uri}"`,
-      `--nsInclude="${sourceDatabase}.${collectionName}"`,
-      `--nsFrom="${sourceDatabase}.${collectionName}"`,
-      `--nsTo="${targetDatabase}.${collectionName}"`,
-      `--gzip`,
-      `--archive="${filePath}"`,
-      options.dropCollections ? "--drop" : "",
-      options.preserveIds === false ? "--noObjectIdCheck" : "",
-      "--numInsertionWorkersPerCollection=4",
-      // ✅ Yeni flag'ler
-      "--stopOnError",
-      "--maintainInsertionOrder",
-    ].filter(Boolean);
-
-    return commandParts.join(" ");
-  }
-
-  /**
-   * ALTERNATİF: Directory-based restore (daha güvenli)
-   */
-  async restoreCollectionDirectory(
-    dbPath,
-    sourceDatabase,
-    targetDatabase,
-    options
-  ) {
-    const uri = this.buildMongoURI(targetDatabase);
-
-    const commandParts = [
-      "mongorestore",
-      `--uri="${uri}"`,
-      `--nsFrom="${sourceDatabase}.*"`,
-      `--nsTo="${targetDatabase}.*"`,
-      `--dir="${dbPath}"`,
-      `--gzip`,
-      options.dropCollections ? "--drop" : "",
-      options.preserveIds === false ? "--noObjectIdCheck" : "",
-      "--numInsertionWorkersPerCollection=4",
-    ].filter(Boolean);
-
-    const command = commandParts.join(" ");
-
-    this.log(`🔧 Restoring directory: ${sourceDatabase} → ${targetDatabase}`);
-
-    try {
-      const output = execSync(command, {
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "pipe"],
-        maxBuffer: 50 * 1024 * 1024,
-      });
-
-      return this.parseBulkRestoreOutput(output);
-    } catch (error) {
-      throw new Error(this.analyzeMongoError(error));
-    }
-  }
-
-  /**
-   * Toplu restore çıktısını parse et
-   */
-  parseBulkRestoreOutput(output) {
-    const collections = [];
-    let totalDocuments = 0;
-
-    // Örnek çıktı: "123 document(s) restored successfully to landing-template.users"
-    const lines = output.split("\n");
-
-    lines.forEach((line) => {
-      const match = line.match(
-        /(\d+) document\(s\) restored successfully to ([^.]+)\.(\w+)/
-      );
-      if (match) {
-        const documents = parseInt(match[1]);
-        const database = match[2];
-        const collection = match[3];
-
-        collections.push({
-          name: collection,
-          documents: documents,
-          status: "success",
-        });
-
-        totalDocuments += documents;
-      }
-    });
-
-    return {
-      collections,
-      documents: totalDocuments,
-    };
-  }
-
-  /**
-   * MongoDB URI oluştur
-   */
   buildMongoURI(databaseName) {
     const originalUri = process.env.MONGODB;
 
-    // URI'yi parçala: mongodb+srv://user:pass@host/existingdb?options
     const match = originalUri.match(
       /^(mongodb(?:\+srv)?:\/\/[^/]+)(?:\/([^?]*))?(\?.*)?$/
     );
@@ -587,17 +380,12 @@ class RestoreManager {
       throw new Error("Invalid MongoDB URI format");
     }
 
-    const baseUri = match[1]; // mongodb+srv://user:pass@host
-    const existingDb = match[2] || ""; // existingdb
-    const options = match[3] || ""; // ?options
+    const baseUri = match[1];
+    const options = match[3] || "";
 
-    // Yeni URI: baseUri/targetDatabase?options
     return `${baseUri}/${databaseName}${options}`;
   }
 
-  /**
-   * Restore öncesi snapshot
-   */
   async createPreRestoreSnapshot(database) {
     try {
       const db = mongoose.connection.db;
@@ -626,9 +414,6 @@ class RestoreManager {
     }
   }
 
-  /**
-   * Restore doğrulama
-   */
   async verifyRestore(restoreResult, targetDatabase) {
     this.log("🔍 Verifying restore...");
 
@@ -663,7 +448,6 @@ class RestoreManager {
   }
 
   // Yardımcı fonksiyonlar
-
   generateRestoreId() {
     return new Date().toISOString().replace(/[:.]/g, "-");
   }
@@ -686,21 +470,6 @@ class RestoreManager {
     });
   }
 
-  parseDocumentCount(output) {
-    const patterns = [
-      /(\d+)\s+document\(s\)\s+restored/,
-      /finished restoring[^(]+\((\d+)/,
-      /(\d+)\s+document\(s\)\s+imported/,
-    ];
-
-    for (const pattern of patterns) {
-      const match = output.match(pattern);
-      if (match) return parseInt(match[1]);
-    }
-
-    return 1; // Varsayılan
-  }
-
   analyzeMongoError(error) {
     if (error.stderr) {
       const stderr = error.stderr.toString();
@@ -715,8 +484,6 @@ class RestoreManager {
         return "Duplicate key (use --drop)";
       } else if (stderr.includes("error parsing uri")) {
         return "URI parsing error";
-      } else if (stderr.includes("nsInclude")) {
-        return "MongoDB version compatibility issue - using modern flags";
       }
 
       return stderr.substring(0, 200);
