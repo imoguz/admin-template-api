@@ -5,7 +5,7 @@
  * Advanced Backup Script
  * -----------------------
  * - Connects to MongoDB before backup
- * - Executes full backup using AdvancedBackupManager
+ * - Executes full backup using BackupManager
  * - Handles file size reporting correctly
  * - Outputs Cloudinary link cleanly
  */
@@ -17,7 +17,7 @@ require("dotenv").config({
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
-const AdvancedBackupManager = require("./backup/AdvancedBackupManager");
+const BackupManager = require("./backup/BackupManager");
 
 // ✅ 1. Mongoose bağlantısını garantiye al
 async function connectDB() {
@@ -40,53 +40,44 @@ async function connectDB() {
 
 // ✅ 2. Ana backup işlemi
 async function main() {
-  await connectDB(); // Mongo bağlantısını aç
+  await connectDB();
 
-  const manager = new AdvancedBackupManager();
+  const manager = new BackupManager();
   const result = await manager.createComprehensiveBackup();
 
   if (result.success) {
-    const backupFilePath =
-      result.localPath ||
-      manager.compressedPath ||
-      (manager.backupDir && manager.backupName
-        ? path.join(manager.backupDir, `${manager.backupName}.tar.gz`)
-        : null);
+    const backupFilePath = result.localPath;
 
     let fileSize = "N/A";
-    if (backupFilePath) {
+    if (backupFilePath && fs.existsSync(backupFilePath)) {
       try {
         const stats = fs.statSync(backupFilePath);
         fileSize = `${(stats.size / 1024).toFixed(2)} KB`;
       } catch (err) {
         console.warn("⚠️ Could not determine file size:", err.message);
       }
-    } else {
-      console.warn(
-        "⚠️ Backup file path is not available in result or manager instance."
-      );
     }
 
-    const displayedFileName =
-      (result.backup && result.backup) ||
-      (result.localPath && path.basename(result.localPath)) ||
-      (manager.backupName ? `${manager.backupName}.tar.gz` : "unknown");
-
-    console.log("\n✅ Backup completed successfully!");
-    console.log(`📁 File: ${displayedFileName}`);
+    console.log("\n" + "=".repeat(50));
+    console.log("✅ BACKUP COMPLETED SUCCESSFULLY!");
+    console.log("=".repeat(50));
+    console.log(`📁 File: ${result.backup}`);
     console.log(`📊 Size: ${fileSize}`);
     console.log(`🕒 Time: ${result.timestamp}`);
+    console.log(`📊 Collections: ${result.metadata?.collections?.length || 0}`);
 
     if (result.cloudinary && result.cloudinary.success) {
-      const url = result.cloudinary.url;
-      console.log(`☁️ Cloudinary: ${url}`);
+      console.log(`☁️ Cloudinary: ${result.cloudinary.url}`);
+    } else if (result.cloudinary && result.cloudinary.error) {
+      console.log(`⚠️ Cloudinary: Upload failed (local backup preserved)`);
     }
 
-    // Bağlantıyı temiz kapat
+    console.log("=".repeat(50));
+
     await mongoose.disconnect();
     process.exit(0);
   } else {
-    console.error("\n❌ Backup failed!");
+    console.error("\n❌ BACKUP FAILED!");
     console.error(`📛 Error: ${result.error}`);
     await mongoose.disconnect();
     process.exit(1);

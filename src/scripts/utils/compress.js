@@ -12,14 +12,32 @@ const path = require("path");
  */
 async function compressFolder(sourceDir, outputFile) {
   try {
+    // Kaynak dizin kontrolü
+    if (!fs.existsSync(sourceDir)) {
+      throw new Error(`Source directory not found: ${sourceDir}`);
+    }
+
+    // Çıktı dizinini oluştur
+    const outputDir = path.dirname(outputFile);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+
     await tar.c(
       {
         gzip: true,
         file: outputFile,
-        cwd: sourceDir,
+        cwd: path.dirname(sourceDir),
+        preservePaths: false,
       },
-      ["."] // Compress all contents
+      [path.basename(sourceDir)] // Sadece klasörün kendisini sıkıştır
     );
+
+    // Dosya boyutu kontrolü
+    const stats = fs.statSync(outputFile);
+    if (stats.size === 0) {
+      throw new Error("Compressed file is empty");
+    }
 
     return outputFile;
   } catch (error) {
@@ -35,8 +53,20 @@ async function compressFolder(sourceDir, outputFile) {
  */
 async function extractBackup(backupFile, targetDir) {
   try {
+    // Backup dosyası kontrolü
+    if (!fs.existsSync(backupFile)) {
+      throw new Error(`Backup file not found: ${backupFile}`);
+    }
+
+    // Target directory oluştur
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    // Dosya boyutu kontrolü
+    const stats = fs.statSync(backupFile);
+    if (stats.size === 0) {
+      throw new Error("Backup file is empty");
     }
 
     await tar.x({
@@ -46,25 +76,62 @@ async function extractBackup(backupFile, targetDir) {
       preservePaths: false,
     });
 
-    const extractedItems = fs.readdirSync(targetDir);
-    if (
-      extractedItems.length === 1 &&
-      fs.statSync(path.join(targetDir, extractedItems[0])).isDirectory()
-    ) {
-      const innerDir = path.join(targetDir, extractedItems[0]);
-      for (const item of fs.readdirSync(innerDir)) {
-        fs.renameSync(path.join(innerDir, item), path.join(targetDir, item));
-      }
-      fs.rmSync(innerDir, { recursive: true, force: true });
-    }
+    // Directory structure normalization
+    await normalizeExtractedStructure(targetDir);
 
     return targetDir;
   } catch (error) {
-    throw new Error(`Compression failed: ${error.stack || error.message}`);
+    throw new Error(`Extraction failed: ${error.message}`);
   }
+}
+
+/**
+ * Normalize extracted tar.gz structure
+ * @param {string} targetDir - Target directory
+ */
+async function normalizeExtractedStructure(targetDir) {
+  const items = fs.readdirSync(targetDir);
+
+  // Eğer sadece bir klasör varsa, içeriğini bir üst seviyeye taşı
+  if (items.length === 1) {
+    const firstItem = path.join(targetDir, items[0]);
+    const stat = fs.statSync(firstItem);
+
+    if (stat.isDirectory()) {
+      const innerItems = fs.readdirSync(firstItem);
+
+      for (const item of innerItems) {
+        const oldPath = path.join(firstItem, item);
+        const newPath = path.join(targetDir, item);
+
+        // Eğer hedefte aynı isimde dosya varsa
+        if (fs.existsSync(newPath)) {
+          fs.rmSync(newPath, { recursive: true, force: true });
+        }
+
+        fs.renameSync(oldPath, newPath);
+      }
+
+      // Boş inner directory'yi sil
+      fs.rmSync(firstItem, { recursive: true, force: true });
+    }
+  }
+}
+
+/**
+ * Decompress folder (alias for extractBackup for consistency)
+ * @param {string} inputPath - Path to compressed file
+ * @param {string} outputPath - Target directory for extraction
+ * @returns {Promise<string>} - Path to extracted directory
+ */
+async function decompressFolder(inputPath, outputPath) {
+  // extractBackup ile aynı işlevi görüyor, sadece farklı isim
+  return await extractBackup(inputPath, outputPath);
 }
 
 module.exports = {
   compressFolder,
   extractBackup,
+  decompressFolder,
+  normalizeExtractedStructure, // Utility olarak dışa aktarılabilir
 };

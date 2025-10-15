@@ -24,5 +24,6 @@ router.use(
 );
 router.use("/test", apiLimiter, require("./test.route"));
 router.use("/backup", apiLimiter, require("./backup.route"));
+router.use("/restore", apiLimiter, require("./restore.route"));
 
 module.exports = router;
