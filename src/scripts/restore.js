@@ -32,20 +32,6 @@ async function main() {
 
   if (!backupSource) {
     console.error("Usage: node restore.js <backup-file|latest> [options]");
-    console.error("\nOptions:");
-    console.error(
-      "  --drop                         Drop collections before restore"
-    );
-    console.error(
-      "  --nsInclude=<namespace>        Restore specific collection (db.collection)"
-    );
-    console.error(
-      "  --nsFrom=<pattern> --nsTo=<pattern>  Rename namespace during restore"
-    );
-    console.error(
-      "  --database=<dbname>            Restore to different database"
-    );
-    console.error("  --list, -l                    List available backups");
     process.exit(1);
   }
 
@@ -73,27 +59,25 @@ async function main() {
   );
 
   if (result.success) {
-    console.log("✅ RESTORE COMPLETED");
-    console.log(`📁 Backup: ${result.backupUsed}`);
+    console.log("RESTORE COMPLETED");
+    console.log(`Backup: ${result.backupUsed}`);
     console.log(
-      `🗄️  Database: ${result.sourceDatabase} → ${result.targetDatabase}`
+      `Database: ${result.sourceDatabase} → ${result.targetDatabase}`
     );
 
     if (options.nsInclude) {
       const collectionName = options.nsInclude.split(".").pop();
-      console.log(`📊 Collection: ${collectionName}`);
+      console.log(`Collection: ${collectionName}`);
     }
 
-    console.log(
-      `📋 Collections restored: ${result.collectionsRestored.length}`
-    );
-    console.log(`📄 Documents restored: ${result.documentsRestored}`);
-    console.log(`⏱️  Duration: ${result.duration}ms`);
+    console.log(`Collections restored: ${result.collectionsRestored.length}`);
+    console.log(`Documents restored: ${result.documentsRestored}`);
+    console.log(`Duration: ${result.duration}ms`);
 
     await mongoose.disconnect();
     process.exit(0);
   } else {
-    console.error("❌ RESTORE FAILED");
+    console.error("RESTORE FAILED");
     console.error(`Error: ${result.error}`);
     await mongoose.disconnect();
     process.exit(1);
@@ -134,7 +118,6 @@ function getArgValue(argName) {
   const args = process.argv.slice(2);
   const exactMatch = args.indexOf(argName);
 
-  // case 1: --param value
   if (
     exactMatch !== -1 &&
     args[exactMatch + 1] &&
@@ -143,7 +126,6 @@ function getArgValue(argName) {
     return args[exactMatch + 1];
   }
 
-  // case 2: --param=value
   const withEqual = args.find((a) => a.startsWith(`${argName}=`));
   if (withEqual) {
     return withEqual.split("=")[1].replace(/^"|"$/g, "");

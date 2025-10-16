@@ -360,12 +360,12 @@ class RestoreManager {
             this.log(`✓ ${coll.name}: ${count} documents`);
           } else {
             this.log(
-              `⚠ ${coll.name}: expected ${coll.documents}, got ${count}`,
+              `${coll.name}: expected ${coll.documents}, got ${count}`,
               "WARN"
             );
           }
         } catch (error) {
-          this.log(`✗ ${coll.name}: ${error.message}`, "WARN");
+          this.log(`${coll.name}: ${error.message}`, "WARN");
         }
       }
     }
