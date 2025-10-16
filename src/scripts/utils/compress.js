@@ -4,13 +4,6 @@ const tar = require("tar");
 const fs = require("fs");
 const path = require("path");
 
-/**
- * Compress a folder to tar.gz
- * @param {string} sourceDir - Source directory to compress
- * @param {string} outputFile - Output tar.gz file path
- * @returns {Promise<string>} - Path to compressed file
- */
-
 async function compressFolder(sourceDir, outputFile) {
   try {
     if (!fs.existsSync(sourceDir)) {
@@ -43,13 +36,6 @@ async function compressFolder(sourceDir, outputFile) {
   }
 }
 
-/**
- * Extract a backup tar.gz file
- * @param {string} backupFile - Path to backup file
- * @param {string} targetDir - Target directory for extraction
- * @returns {Promise<string>} - Path to extracted directory
- */
-
 async function extractBackup(backupFile, targetDir) {
   try {
     if (!fs.existsSync(backupFile)) {
@@ -80,11 +66,6 @@ async function extractBackup(backupFile, targetDir) {
   }
 }
 
-/**
- * Normalize extracted tar.gz structure
- * @param {string} targetDir - Target directory
- */
-
 async function normalizeExtractedStructure(targetDir) {
   const items = fs.readdirSync(targetDir);
 
@@ -110,13 +91,6 @@ async function normalizeExtractedStructure(targetDir) {
     }
   }
 }
-
-/**
- * Decompress folder (alias for extractBackup for consistency)
- * @param {string} inputPath - Path to compressed file
- * @param {string} outputPath - Target directory for extraction
- * @returns {Promise<string>} - Path to extracted directory
- */
 
 async function decompressFolder(inputPath, outputPath) {
   return await extractBackup(inputPath, outputPath);

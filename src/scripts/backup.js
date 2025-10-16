@@ -19,14 +19,13 @@ async function connectDB() {
 
   try {
     await mongoose.connect(uri);
-    console.log("MongoDB connection established for backup operations.\n");
+    console.log("MongoDB connected for backup");
   } catch (err) {
     console.error("MongoDB connection failed:", err.message);
     process.exit(1);
   }
 }
 
-// Main Backup
 async function main() {
   await connectDB();
 
@@ -42,7 +41,7 @@ async function main() {
         const stats = fs.statSync(backupFilePath);
         fileSize = `${(stats.size / 1024).toFixed(2)} KB`;
       } catch (err) {
-        console.warn("! Could not determine file size:", err.message);
+        console.warn("Could not determine file size:", err.message);
       }
     }
 
@@ -53,13 +52,6 @@ async function main() {
     console.log(`Size: ${fileSize}`);
     console.log(`Time: ${result.timestamp}`);
     console.log(`Collections: ${result.metadata?.collections?.length || 0}`);
-
-    if (result.cloudinary && result.cloudinary.success) {
-      console.log(`Cloudinary: ${result.cloudinary.url}`);
-    } else if (result.cloudinary && result.cloudinary.error) {
-      console.log(`Cloudinary: Upload failed (local backup preserved)`);
-    }
-
     console.log("=".repeat(50));
 
     await mongoose.disconnect();
@@ -71,7 +63,6 @@ async function main() {
   }
 }
 
-// Global error handlers
 process.on("unhandledRejection", (error) => {
   console.error("Unhandled rejection:", error);
   mongoose.disconnect().then(() => process.exit(1));

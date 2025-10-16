@@ -3,7 +3,6 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
-const cloudinary = require("cloudinary").v2;
 const mongoose = require("mongoose");
 const { compressFolder } = require("../utils/compress");
 
@@ -12,21 +11,8 @@ class BackupManager {
     this.backupDir = process.env.BACKUP_STORAGE_PATH || "./backups";
     this.logsDir = path.join(process.cwd(), "logs", "backups");
     this.retentionDays = parseInt(process.env.BACKUP_RETENTION_DAYS) || 30;
-    this.uploadToCloudinary =
-      process.env.BACKUP_UPLOAD_TO_CLOUDINARY === "true";
 
     this.ensureDirs();
-    this.configureCloudinary();
-  }
-
-  configureCloudinary() {
-    if (this.uploadToCloudinary && process.env.CLOUDINARY_CLOUD_NAME) {
-      cloudinary.config({
-        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-        api_key: process.env.CLOUDINARY_API_KEY,
-        api_secret: process.env.CLOUDINARY_API_SECRET,
-      });
-    }
   }
 
   ensureDirs() {
@@ -69,32 +55,10 @@ class BackupManager {
       const mongoResult = await this.createMongoDBDump(backupPath);
       const metadata = await this.collectSystemMetadata(backupPath, backupName);
 
-      const cloudinaryMetadata = await this.backupCloudinaryMetadata(
-        backupPath
-      );
-      metadata.cloudinary = cloudinaryMetadata;
-
       await this.backupApplicationConfig(backupPath);
 
       const compressedPath = await this.compressBackup(backupPath, backupName);
       this.compressedPath = compressedPath;
-
-      let cloudinaryResult = null;
-      if (this.uploadToCloudinary) {
-        try {
-          cloudinaryResult = await this.uploadToCloudinaryStorage(
-            compressedPath,
-            backupName
-          );
-        } catch (error) {
-          this.log(`Cloudinary upload failed: ${error.message}`, "WARN");
-          cloudinaryResult = {
-            success: false,
-            error: error.message,
-            skipped: true,
-          };
-        }
-      }
 
       fs.rmSync(backupPath, { recursive: true, force: true });
       this.applyRetentionPolicy();
@@ -104,18 +68,14 @@ class BackupManager {
         success: true,
         backup: `${backupName}.tar.gz`,
         metadata,
-        cloudinary: cloudinaryResult,
         localPath: compressedPath,
         timestamp: new Date().toISOString(),
       };
 
       this.log(`Backup completed: ${backupName}.tar.gz`);
-      await this.sendBackupNotification(result, "SUCCESS");
-
       return result;
     } catch (error) {
       this.log(`Backup failed: ${error.message}`, "ERROR");
-      await this.sendBackupNotification({ error: error.message }, "FAILED");
       return { success: false, error: error.message };
     }
   }
@@ -213,53 +173,7 @@ class BackupManager {
       collections,
       totalSize: this.formatBytes(totalSize),
       fileCount: gzFiles ? gzFiles.length : 0,
-      rawOutput: output.substring(0, 500) + "...",
     };
-  }
-
-  async backupCloudinaryMetadata(backupPath) {
-    if (!this.uploadToCloudinary) {
-      return { skipped: true, reason: "Cloudinary upload disabled" };
-    }
-
-    try {
-      this.log(`Backing up Cloudinary metadata...`);
-
-      const result = await cloudinary.api.resources({
-        type: "upload",
-        prefix: process.env.CLOUDINARY_UPLOAD_FOLDER,
-        max_results: 500,
-      });
-
-      const cloudinaryData = {
-        resources: result.resources,
-        total_count: result.resources.length,
-        backup_timestamp: new Date().toISOString(),
-        folder: process.env.CLOUDINARY_UPLOAD_FOLDER,
-      };
-
-      const cloudinaryBackupPath = path.join(
-        backupPath,
-        "cloudinary-metadata.json"
-      );
-      fs.writeFileSync(
-        cloudinaryBackupPath,
-        JSON.stringify(cloudinaryData, null, 2)
-      );
-
-      this.log(
-        `Cloudinary metadata backed up: ${result.resources.length} resources`
-      );
-
-      return {
-        success: true,
-        resourceCount: result.resources.length,
-        totalSize: this.formatBytes(JSON.stringify(cloudinaryData).length),
-      };
-    } catch (error) {
-      this.log(`Cloudinary metadata backup failed: ${error.message}`, "WARN");
-      return { success: false, error: error.message };
-    }
   }
 
   async backupApplicationConfig(backupPath) {
@@ -267,7 +181,6 @@ class BackupManager {
       if (!mongoose.connection || mongoose.connection.readyState !== 1) {
         this.log("MongoDB connection not ready, reconnecting...");
         await mongoose.connect(process.env.MONGODB);
-        this.log("MongoDB connection established for config snapshot.");
       }
 
       const db = mongoose.connection.db;
@@ -293,14 +206,6 @@ class BackupManager {
         backupVersion: "2.3.0",
         timestamp: new Date().toISOString(),
         collections: collectionStats,
-        cloudinary: {
-          configured: !!process.env.CLOUDINARY_CLOUD_NAME,
-          uploadFolder: process.env.CLOUDINARY_UPLOAD_FOLDER || "backups",
-        },
-        redis: {
-          configured: !!process.env.REDIS_URL,
-          connected: await this.checkRedisConnection(),
-        },
       };
 
       const configPath = path.join(backupPath, "application-config.json");
@@ -315,18 +220,6 @@ class BackupManager {
     } catch (error) {
       this.log(`Application config backup failed: ${error.message}`, "WARN");
       return { error: error.message };
-    }
-  }
-
-  async checkRedisConnection() {
-    try {
-      const redis = require("../../configs/redis");
-      const client = redis.getClient();
-      await client.ping();
-      return true;
-    } catch (error) {
-      this.log(`Redis connection check failed: ${error.message}`, "WARN");
-      return false;
     }
   }
 
@@ -364,37 +257,6 @@ class BackupManager {
     this.log(`Compression completed: ${this.formatBytes(stats.size)}`);
 
     return outputFile;
-  }
-
-  async uploadToCloudinaryStorage(filePath, backupName) {
-    if (!this.uploadToCloudinary) {
-      return { skipped: true };
-    }
-
-    try {
-      this.log(`Uploading to Cloudinary...`);
-
-      const result = await cloudinary.uploader.upload(filePath, {
-        resource_type: "raw",
-        folder: process.env.CLOUDINARY_BACKUP_FOLDER || "backups",
-        public_id: backupName,
-        overwrite: false,
-        tags: ["database-backup", "automated"],
-      });
-
-      this.log(`Uploaded to Cloudinary: ${result.secure_url}`);
-
-      return {
-        success: true,
-        url: result.secure_url,
-        public_id: result.public_id,
-        bytes: result.bytes,
-        format: result.format,
-      };
-    } catch (error) {
-      this.log(`Cloudinary upload failed: ${error.message}`, "ERROR");
-      throw error;
-    }
   }
 
   applyRetentionPolicy() {
@@ -452,21 +314,6 @@ class BackupManager {
     } catch (error) {
       this.log(`Backup verification failed: ${error.message}`, "ERROR");
       throw error;
-    }
-  }
-
-  async sendBackupNotification(result, status) {
-    const notification = {
-      status,
-      timestamp: new Date().toISOString(),
-      backup: result.backup,
-      environment: process.env.NODE_ENV,
-    };
-
-    if (status === "SUCCESS") {
-      this.log(`Backup notification: SUCCESS - ${result.backup}`);
-    } else {
-      this.log(`Backup notification: FAILED - ${result.error}`, "ERROR");
     }
   }
 

@@ -3,7 +3,6 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
-const cloudinary = require("cloudinary").v2;
 const mongoose = require("mongoose");
 const { decompressFolder } = require("../utils/compress");
 
@@ -14,32 +13,20 @@ class RestoreManager {
     this.logsDir = path.join(process.cwd(), "logs", "restores");
 
     this.ensureDirectories();
-    this.configureCloudinary();
   }
 
   ensureDirectories() {
-    const directories = [this.backupDir, this.tempDir, this.logsDir];
-
-    for (const dir of directories) {
+    [this.backupDir, this.tempDir, this.logsDir].forEach((dir) => {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-    }
-  }
-
-  configureCloudinary() {
-    if (process.env.CLOUDINARY_CLOUD_NAME) {
-      cloudinary.config({
-        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-        api_key: process.env.CLOUDINARY_API_KEY,
-        api_secret: process.env.CLOUDINARY_API_SECRET,
-      });
-    }
+    });
   }
 
   log(message, type = "INFO") {
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] ${type}: ${message}`;
+    console.log(logMessage);
 
     try {
       const logFile = path.join(
@@ -58,6 +45,7 @@ class RestoreManager {
 
     this.log(`Starting restore process: ${restoreId}`);
     this.log(`Backup source: ${backupSource}`);
+    this.log(`Options: ${JSON.stringify(options)}`);
 
     try {
       const backupInfo = await this.locateAndExtractBackup(
@@ -69,8 +57,6 @@ class RestoreManager {
       const targetDatabase = options.restoreToDatabase || metadata.database;
       this.log(`Target database: ${targetDatabase}`);
 
-      await this.createPreRestoreSnapshot(targetDatabase);
-
       const restoreResult = await this.executeMongoRestore(
         tempRestorePath,
         metadata.database,
@@ -79,7 +65,7 @@ class RestoreManager {
       );
 
       if (!options.skipVerification) {
-        await this.verifyRestore(restoreResult, targetDatabase);
+        await this.verifyRestore(restoreResult, targetDatabase, options);
       }
 
       const result = {
@@ -111,20 +97,7 @@ class RestoreManager {
   async locateAndExtractBackup(backupSource, extractPath) {
     this.log(`Locating backup: ${backupSource}`);
 
-    let backupPath;
-
-    if (
-      backupSource.startsWith("http") ||
-      backupSource.startsWith("cloudinary:")
-    ) {
-      backupPath = await this.downloadFromCloudinary(
-        backupSource,
-        path.dirname(extractPath)
-      );
-    } else {
-      backupPath = this.findLocalBackup(backupSource);
-    }
-
+    const backupPath = this.findLocalBackup(backupSource);
     if (!backupPath) {
       throw new Error(`Backup not found: ${backupSource}`);
     }
@@ -166,14 +139,10 @@ class RestoreManager {
     }
 
     if (!selectedBackup) {
-      throw new Error(
-        `No backup found for: ${backupIdentifier}\n` +
-          `Available: ${backupFiles.slice(0, 5).join(", ")}`
-      );
+      throw new Error(`No backup found for: ${backupIdentifier}`);
     }
 
     const fullPath = path.join(this.backupDir, selectedBackup);
-
     if (!fs.existsSync(fullPath)) {
       throw new Error(`Backup file missing: ${fullPath}`);
     }
@@ -182,57 +151,14 @@ class RestoreManager {
     return fullPath;
   }
 
-  async downloadFromCloudinary(source, downloadDir) {
-    this.log(`Downloading from Cloudinary: ${source}`);
-
-    try {
-      const publicId = this.extractPublicId(source);
-      const downloadUrl = this.getCloudinaryDownloadUrl(source, publicId);
-      const outputPath = path.join(downloadDir, `${publicId}.tar.gz`);
-
-      await this.downloadFile(downloadUrl, outputPath);
-      this.log(`Download completed: ${outputPath}`);
-
-      return outputPath;
-    } catch (error) {
-      throw new Error(`Cloudinary download failed: ${error.message}`);
-    }
-  }
-
-  async downloadFile(url, outputPath) {
-    return new Promise((resolve, reject) => {
-      const https = require("https");
-      const file = fs.createWriteStream(outputPath);
-
-      https
-        .get(url, (response) => {
-          if (response.statusCode !== 200) {
-            reject(new Error(`HTTP ${response.statusCode}`));
-            return;
-          }
-
-          response.pipe(file);
-
-          file.on("finish", () => {
-            file.close();
-            resolve(outputPath);
-          });
-        })
-        .on("error", (error) => {
-          fs.unlink(outputPath, () => {});
-          reject(new Error(`Download error: ${error.message}`));
-        });
-    });
-  }
-
   validateExtractedStructure(extractPath) {
     if (!fs.existsSync(extractPath)) {
       throw new Error("Extraction failed - directory not created");
     }
 
     const items = fs.readdirSync(extractPath);
-
     const hasMetadata = items.includes("backup-metadata.json");
+
     if (!hasMetadata) {
       throw new Error("Invalid backup - metadata file missing");
     }
@@ -285,81 +211,67 @@ class RestoreManager {
     }
 
     const uri = this.buildMongoURI(targetDatabase);
-
     let commandParts = [
       "mongorestore",
       `--uri="${uri}"`,
       `--dir="${sourceDbPath}"`,
       `--gzip`,
-      options.dropCollections ? "--drop" : "",
-      options.preserveIds === false ? "--noObjectIdCheck" : "",
       "--numInsertionWorkersPerCollection=4",
       "--stopOnError",
-      "--maintainInsertionOrder",
     ];
 
-    if (options.collections && options.collections.length > 0) {
-      options.collections.forEach((collection) => {
-        commandParts.push(`--nsInclude="${sourceDatabase}.${collection}"`);
-      });
-      this.log(`Selective restore: ${options.collections.join(", ")}`);
-    } else if (options.nsInclude) {
+    // Add options based on parameters
+    if (options.dropCollections) {
+      commandParts.push("--drop");
+    }
+
+    if (options.preserveIds === false) {
+      commandParts.push("--noObjectIdCheck");
+    }
+
+    // Handle namespace operations
+    if (options.nsInclude) {
       commandParts.push(`--nsInclude="${options.nsInclude}"`);
-      this.log(`Namespace include: ${options.nsInclude}`);
-    } else {
+      this.log(`Restoring specific collection: ${options.nsInclude}`);
+    }
+
+    if (options.nsFrom && options.nsTo) {
+      commandParts.push(`--nsFrom="${options.nsFrom}"`);
+      commandParts.push(`--nsTo="${options.nsTo}"`);
+      this.log(`Renaming namespace: ${options.nsFrom} → ${options.nsTo}`);
+    } else if (!options.nsInclude) {
+      // Default namespace mapping for full database restore
       commandParts.push(`--nsFrom="${sourceDatabase}.*"`);
       commandParts.push(`--nsTo="${targetDatabase}.*"`);
     }
 
     const command = commandParts.join(" ");
-
-    this.log(`Restoring: ${sourceDatabase} → ${targetDatabase}`);
+    this.log(`Executing: ${command}`);
 
     try {
-      execSync(command, {
+      const output = execSync(command, {
         encoding: "utf8",
         stdio: ["pipe", "pipe", "pipe"],
         maxBuffer: 50 * 1024 * 1024,
       });
 
-      const db = mongoose.connection.db;
-      let collectionsToCheck;
+      this.log(`MongoDB restore command executed successfully`);
 
-      if (options.collections && options.collections.length > 0) {
-        collectionsToCheck = options.collections.map((name) => ({ name }));
-      } else {
-        collectionsToCheck = await db.listCollections().toArray();
-      }
-
-      const collectionsRestored = [];
-      let totalDocuments = 0;
-
-      for (const coll of collectionsToCheck) {
-        try {
-          const count = await db.collection(coll.name).countDocuments();
-          collectionsRestored.push({
-            name: coll.name,
-            documents: count,
-            status: "success",
-          });
-          totalDocuments += count;
-        } catch (err) {
-          collectionsRestored.push({
-            name: coll.name,
-            documents: 0,
-            status: "error",
-          });
-        }
-      }
+      // Analyze what was actually restored
+      const restoreAnalysis = await this.analyzeRestoreResult(
+        sourceDatabase,
+        targetDatabase,
+        options
+      );
 
       const result = {
-        collections: collectionsRestored,
-        documents: totalDocuments,
+        collections: restoreAnalysis.collections,
+        documents: restoreAnalysis.totalDocuments,
         duration: Date.now() - startTime,
       };
 
       this.log(
-        `Restore completed: ${result.collections.length} collections, ${result.documents} documents`
+        `Restore analysis: ${result.collections.length} collections, ${result.documents} documents`
       );
       return result;
     } catch (error) {
@@ -367,6 +279,52 @@ class RestoreManager {
         `MongoDB restore failed: ${this.analyzeMongoError(error)}`
       );
     }
+  }
+
+  async analyzeRestoreResult(sourceDatabase, targetDatabase, options) {
+    const db = mongoose.connection.db;
+    let collectionsToCheck = [];
+
+    if (options.nsInclude) {
+      // Only check the specific collection that was restored
+      const collectionName = options.nsInclude.split(".").pop();
+      collectionsToCheck = [{ name: collectionName }];
+    } else {
+      // Check all collections in target database
+      try {
+        collectionsToCheck = await db.listCollections().toArray();
+      } catch (error) {
+        this.log(`Could not list collections: ${error.message}`, "WARN");
+        return { collections: [], totalDocuments: 0 };
+      }
+    }
+
+    const collections = [];
+    let totalDocuments = 0;
+
+    for (const coll of collectionsToCheck) {
+      try {
+        const count = await db.collection(coll.name).countDocuments();
+        collections.push({
+          name: coll.name,
+          documents: count,
+          status: "success",
+        });
+        totalDocuments += count;
+      } catch (err) {
+        collections.push({
+          name: coll.name,
+          documents: 0,
+          status: "error",
+          error: err.message,
+        });
+      }
+    }
+
+    return {
+      collections,
+      totalDocuments,
+    };
   }
 
   buildMongoURI(databaseName) {
@@ -386,35 +344,7 @@ class RestoreManager {
     return `${baseUri}/${databaseName}${options}`;
   }
 
-  async createPreRestoreSnapshot(database) {
-    try {
-      const db = mongoose.connection.db;
-      const collections = await db.listCollections().toArray();
-
-      const snapshot = {
-        timestamp: new Date().toISOString(),
-        database,
-        collections: {},
-      };
-
-      for (const coll of collections) {
-        try {
-          const count = await db.collection(coll.name).countDocuments();
-          snapshot.collections[coll.name] = { count };
-        } catch (error) {
-          snapshot.collections[coll.name] = { error: error.message };
-        }
-      }
-
-      this.log(`Pre-restore snapshot: ${collections.length} collections`);
-      return snapshot;
-    } catch (error) {
-      this.log("Could not create pre-restore snapshot", "WARN");
-      return null;
-    }
-  }
-
-  async verifyRestore(restoreResult, targetDatabase) {
+  async verifyRestore(restoreResult, targetDatabase, options) {
     this.log("Verifying restore...");
 
     const db = mongoose.connection.db;
@@ -427,43 +357,26 @@ class RestoreManager {
 
           if (count >= coll.documents) {
             verified++;
+            this.log(`✓ ${coll.name}: ${count} documents`);
           } else {
             this.log(
-              `Count mismatch: ${coll.name} (expected ${coll.documents}, got ${count})`,
+              `⚠ ${coll.name}: expected ${coll.documents}, got ${count}`,
               "WARN"
             );
           }
         } catch (error) {
-          this.log(`Could not verify ${coll.name}: ${error.message}`, "WARN");
+          this.log(`✗ ${coll.name}: ${error.message}`, "WARN");
         }
       }
     }
 
     this.log(
-      `Verification: ${verified}/${restoreResult.collections.length} collections`
+      `Verification: ${verified}/${restoreResult.collections.length} collections verified`
     );
   }
 
   generateRestoreId() {
     return new Date().toISOString().replace(/[:.]/g, "-");
-  }
-
-  extractPublicId(source) {
-    if (source.startsWith("http")) {
-      const match = source.match(/\/upload\/(?:v\d+\/)?(.+)\.tar\.gz/);
-      return match ? match[1] : path.basename(source, ".tar.gz");
-    }
-    return source.replace("cloudinary:", "");
-  }
-
-  getCloudinaryDownloadUrl(source, publicId) {
-    if (source.startsWith("http")) {
-      return source;
-    }
-    return cloudinary.url(publicId, {
-      resource_type: "raw",
-      attachment: true,
-    });
   }
 
   analyzeMongoError(error) {
@@ -473,16 +386,16 @@ class RestoreManager {
       if (stderr.includes("Authentication failed")) {
         return "MongoDB authentication failed";
       } else if (stderr.includes("namespace exists")) {
-        return "Collection exists (use --drop)";
+        return "Collection exists (use --drop to replace)";
       } else if (stderr.includes("not found")) {
         return "Database/collection not found";
       } else if (stderr.includes("duplicate key error")) {
-        return "Duplicate key (use --drop)";
+        return "Duplicate key error (use --drop to clear existing data)";
       } else if (stderr.includes("error parsing uri")) {
         return "URI parsing error";
       }
 
-      return stderr.substring(0, 200);
+      return stderr.substring(0, 300);
     }
 
     return error.message;

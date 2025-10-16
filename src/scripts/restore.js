@@ -31,9 +31,21 @@ async function main() {
   const backupSource = args[0];
 
   if (!backupSource) {
+    console.error("Usage: node restore.js <backup-file|latest> [options]");
+    console.error("\nOptions:");
     console.error(
-      "Usage: node restore.js <backup-file|latest|cloudinary:public_id> [--drop]"
+      "  --drop                         Drop collections before restore"
     );
+    console.error(
+      "  --nsInclude=<namespace>        Restore specific collection (db.collection)"
+    );
+    console.error(
+      "  --nsFrom=<pattern> --nsTo=<pattern>  Rename namespace during restore"
+    );
+    console.error(
+      "  --database=<dbname>            Restore to different database"
+    );
+    console.error("  --list, -l                    List available backups");
     process.exit(1);
   }
 
@@ -42,7 +54,7 @@ async function main() {
     skipVerification: args.includes("--skip-verify"),
     preserveIds: !args.includes("--new-ids"),
     restoreToDatabase: getArgValue("--database"),
-    restoreCloudinaryMetadata: args.includes("--with-cloudinary"),
+    nsInclude: getArgValue("--nsInclude"),
     nsFrom: getArgValue("--nsFrom"),
     nsTo: getArgValue("--nsTo"),
   };
@@ -61,19 +73,27 @@ async function main() {
   );
 
   if (result.success) {
-    console.log("RESTORE COMPLETED");
-    console.log(`Backup: ${result.backupUsed}`);
+    console.log("✅ RESTORE COMPLETED");
+    console.log(`📁 Backup: ${result.backupUsed}`);
     console.log(
-      `Database: ${result.sourceDatabase} → ${result.targetDatabase}`
+      `🗄️  Database: ${result.sourceDatabase} → ${result.targetDatabase}`
     );
-    console.log(`Collections: ${result.collectionsRestored.length}`);
-    console.log(`Documents: ${result.documentsRestored}`);
-    console.log(`Duration: ${result.duration}ms`);
+
+    if (options.nsInclude) {
+      const collectionName = options.nsInclude.split(".").pop();
+      console.log(`📊 Collection: ${collectionName}`);
+    }
+
+    console.log(
+      `📋 Collections restored: ${result.collectionsRestored.length}`
+    );
+    console.log(`📄 Documents restored: ${result.documentsRestored}`);
+    console.log(`⏱️  Duration: ${result.duration}ms`);
 
     await mongoose.disconnect();
     process.exit(0);
   } else {
-    console.error("RESTORE FAILED");
+    console.error("❌ RESTORE FAILED");
     console.error(`Error: ${result.error}`);
     await mongoose.disconnect();
     process.exit(1);
@@ -103,7 +123,7 @@ async function listBackups() {
   files.forEach((file, index) => {
     const filePath = path.join(backupDir, file);
     const stats = fs.statSync(filePath);
-    const size = (stats.size / 1024).toFixed(2) + " KB";
+    const size = (stats.size / 1024 / 1024).toFixed(2) + " MB";
     const date = stats.mtime.toISOString().replace("T", " ").substring(0, 19);
 
     console.log(`${index + 1}. ${file} (${size}) - ${date}`);
@@ -112,18 +132,34 @@ async function listBackups() {
 
 function getArgValue(argName) {
   const args = process.argv.slice(2);
-  const index = args.indexOf(argName);
-  return index !== -1 && args[index + 1] ? args[index + 1] : null;
+  const exactMatch = args.indexOf(argName);
+
+  // case 1: --param value
+  if (
+    exactMatch !== -1 &&
+    args[exactMatch + 1] &&
+    !args[exactMatch + 1].startsWith("--")
+  ) {
+    return args[exactMatch + 1];
+  }
+
+  // case 2: --param=value
+  const withEqual = args.find((a) => a.startsWith(`${argName}=`));
+  if (withEqual) {
+    return withEqual.split("=")[1].replace(/^"|"$/g, "");
+  }
+
+  return null;
 }
 
 process.on("unhandledRejection", (error) => {
   console.error("Unhandled rejection:", error);
-  mongoose.disconnect().then(() => process.exit(1));
+  process.exit(1);
 });
 
 process.on("uncaughtException", (error) => {
   console.error("Uncaught exception:", error);
-  mongoose.disconnect().then(() => process.exit(1));
+  process.exit(1);
 });
 
 if (require.main === module) {
