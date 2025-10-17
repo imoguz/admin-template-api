@@ -2,38 +2,15 @@
 
 const SectionTemplate = require("../models/sectionTemplate.model");
 const { createAuditLog } = require("../helpers/audit.helper");
-const cacheService = require("../services/cache.service");
-
-// Cache keys
-const CACHE_KEYS = {
-  ALL_TEMPLATES: "section:templates:all",
-  TEMPLATE_DETAIL: (id) => `section:template:${id}`,
-};
 
 module.exports = {
   listTemplates: async (req, res) => {
     try {
-      // try retrive from cache
-      const cacheKey = CACHE_KEYS.ALL_TEMPLATES;
-      const cached = await cacheService.get(cacheKey);
-
-      if (cached) {
-        return res.json({
-          success: true,
-          data: cached,
-          count: cached.length,
-          source: "cache",
-        });
-      }
-
-      // if not in cache fetch database
+      // Direct database fetch (cache removed)
       const templates = await SectionTemplate.find({ isActive: true })
         .sort({ name: 1 })
         .select("name description icon slug")
         .lean();
-
-      // Save cache (5m)
-      await cacheService.set(cacheKey, templates, 300);
 
       res.json({
         success: true,
@@ -54,18 +31,6 @@ module.exports = {
     try {
       const { id } = req.params;
 
-      // Retrive from cache
-      const cacheKey = CACHE_KEYS.TEMPLATE_DETAIL(id);
-      const cached = await cacheService.get(cacheKey);
-
-      if (cached) {
-        return res.json({
-          success: true,
-          data: cached,
-          source: "cache",
-        });
-      }
-
       const template = await SectionTemplate.findById(id);
       if (!template) {
         return res.status(404).json({
@@ -73,9 +38,6 @@ module.exports = {
           message: "Section template not found",
         });
       }
-
-      // Save cache (10m)
-      await cacheService.set(cacheKey, template, 600);
 
       res.json({
         success: true,
@@ -116,9 +78,6 @@ module.exports = {
         description: description.trim(),
         icon: icon.trim(),
       });
-
-      // Clean cache
-      await cacheService.deletePattern("section:templates:*");
 
       // Audit log
       await createAuditLog({
@@ -185,9 +144,6 @@ module.exports = {
 
       await template.save();
 
-      // clean cache
-      await cacheService.deletePattern("section:templates:*");
-
       // Audit log
       await createAuditLog({
         collectionName: "sectionTemplates",
@@ -240,9 +196,6 @@ module.exports = {
       const previousValues = template.toObject();
       template.isActive = false;
       await template.save();
-
-      // Clean cache
-      await cacheService.deletePattern("section:templates:*");
 
       // Audit log
       await createAuditLog({

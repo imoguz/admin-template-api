@@ -16,58 +16,77 @@ const getClientIP = (req) => {
   return req.ip;
 };
 
-// Genel API limiter
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15m
-  max: (req) => {
-    if (req.path.startsWith("/health")) return 0;
-    return 100; // 100 req per IP
+// Rate limit configuration
+const createRateLimiter = (config) => {
+  return rateLimit({
+    windowMs: config.windowMs,
+    max: config.max,
+    message: {
+      error: true,
+      message: config.message,
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      const ip = getClientIP(req);
+      return `${config.keyPrefix}:${ip}`;
+    },
+    skip: (req) => {
+      if (req.path.startsWith("/health")) return true;
+      if (process.env.NODE_ENV === "development" && config.skipInDevelopment) {
+        return true;
+      }
+      return false;
+    },
+  });
+};
+
+// Rate limit configurations
+const rateLimitConfigs = {
+  auth: {
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message:
+      "Too many authentication attempts. Please try again in 15 minutes.",
+    keyPrefix: "auth",
+    skipInDevelopment: false,
   },
-  message: {
-    error: true,
+  api: {
+    windowMs: 1 * 60 * 1000,
+    max: 100,
     message: "Too many requests. Please try again later.",
+    keyPrefix: "api",
+    skipInDevelopment: true,
   },
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    const ip = getClientIP(req);
-    return `global:${ip}`;
+  public: {
+    windowMs: 1 * 60 * 1000,
+    max: 200,
+    message: "Too many requests from your network.",
+    keyPrefix: "public",
+    skipInDevelopment: true,
   },
-});
+};
 
-// Auth-specific limiter
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15m
-  max: 10, // 10 login attempt per IP
+// Rate limit instances
+const authLimiter = createRateLimiter(rateLimitConfigs.auth);
+const apiLimiter = createRateLimiter(rateLimitConfigs.api);
+const publicLimiter = createRateLimiter(rateLimitConfigs.public);
+
+// Global rate limiter (fallback)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: {
     error: true,
-    message: "Too many authentication attempts. Try again after 15 minutes.",
+    message: "Too many requests from your IP address.",
   },
   standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    const ip = getClientIP(req);
-    return `auth:${ip}`;
-  },
-});
-
-// Strict limiter for critical operations
-const strictLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 h
-  max: 20,
-  message: {
-    error: true,
-    message: "Too many attempts. Please try again later.",
-  },
-  keyGenerator: (req) => {
-    const ip = getClientIP(req);
-    const path = req.path.replace(/\//g, ":");
-    return `strict:${ip}:${path}`;
-  },
 });
 
 module.exports = {
-  globalLimiter,
   authLimiter,
-  strictLimiter,
+  apiLimiter,
+  publicLimiter,
+  globalLimiter,
+  getClientIP,
 };

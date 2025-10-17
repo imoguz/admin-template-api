@@ -18,10 +18,8 @@ const {
   resetPassword,
 } = require("../controllers/auth.controller");
 
-// ÖZEL: Sadece validation'dan geçmiş login attempt'ler için custom rate limiter
 router.post("/login", authRateLimiter, validate(loginSchema), login);
 
-// Diğer auth endpoint'leri için genel rate limiting (opsiyonel)
 router.post("/refresh", validate(refreshTokenSchema), refreshToken);
 router.post("/logout", validate(refreshTokenSchema), logout);
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);

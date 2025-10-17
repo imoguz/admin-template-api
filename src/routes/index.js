@@ -1,10 +1,7 @@
 "use strict";
 
 const router = require("express").Router();
-const {
-  apiLimiter,
-  publicLimiter,
-} = require("../middlewares/redisRateLimiter");
+const { apiLimiter, publicLimiter } = require("../middlewares/rateLimiter");
 
 // Public routes with higher rate limits
 router.use("/health", publicLimiter, require("./health.route"));
@@ -20,6 +17,5 @@ router.use(
   publicLimiter,
   require("./sectionTemplate.route")
 );
-router.use("/test", apiLimiter, require("./test.route"));
 
 module.exports = router;

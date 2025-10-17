@@ -16,20 +16,6 @@ try {
   process.exit(1);
 }
 
-// ----- Initialize Redis & Cache -----
-const cacheService = require("./src/services/cache.service");
-const redisManager = require("./src/configs/redis");
-
-// Async initialization
-const initializeServices = async () => {
-  try {
-    await cacheService.init();
-    console.log("✅ All services initialized");
-  } catch (error) {
-    console.error("❌ Service initialization failed:", error.message);
-  }
-};
-
 // ----- Security Headers with Helmet -----
 const helmet = require("helmet");
 app.use(
@@ -96,20 +82,10 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // ----- Rate Limiting -----
-const {
-  globalLimiter,
-  authLimiter,
-  apiLimiter,
-  publicLimiter,
-} = require("./src/middlewares/redisRateLimiter");
-
-// Global rate limiter (fallback olarak)
-app.use(globalLimiter);
-// ----- middlewares -----
+app.use(require("./src/middlewares/rateLimiter").globalLimiter);
 
 // ----- Security Middlewares -----
-
-// 1. URL Security (ilk sırada)
+// 1. URL Security
 const urlSecurity = require("./src/middlewares/urlSecurity");
 app.use(urlSecurity);
 
@@ -128,6 +104,7 @@ app.use(fileUploadSecurity);
 // 5. XSS Protection
 const xssSanitize = require("./src/middlewares/xssSanitize");
 app.use(xssSanitize);
+
 // -----Logger -----
 const logger = require("./src/middlewares/logger");
 app.use(logger);
@@ -154,25 +131,7 @@ app.use((req, res, next) => {
 const errorHandler = require("./src/middlewares/errorHandler");
 app.use(errorHandler);
 
-// ----- Graceful shutdown -----
-process.on("SIGINT", async () => {
-  console.log("🔄 Received SIGINT. Shutting down gracefully...");
-  await redisManager.disconnect();
-  process.exit(0);
-});
-
-process.on("SIGTERM", async () => {
-  console.log("🔄 Received SIGTERM. Shutting down gracefully...");
-  await redisManager.disconnect();
-  process.exit(0);
-});
-
 // ----- Start server -----
-app.listen(PORT, async () => {
-  await initializeServices();
-  console.log(`✅ Server is running on port ${PORT}`);
-  console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-  console.log(
-    `🔮 Redis: ${redisManager.isConnected ? "Connected" : "Disconnected"}`
-  );
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
