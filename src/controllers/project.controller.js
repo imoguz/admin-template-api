@@ -1,12 +1,11 @@
+"use strict";
+
 const mongoose = require("mongoose");
 const sanitizeHtml = require("sanitize-html");
 const Project = require("../models/project.model");
 const { createAuditLog } = require("../helpers/audit.helper");
 const SectionTemplate = require("../models/sectionTemplate.model");
-const {
-  uploadToCloudinaryBuffer,
-  deleteFromCloudinary,
-} = require("../helpers/cloudinary");
+const fileStorage = require("../helpers/fileStorage");
 
 // Slug validation function
 const validateSlug = (slug) => {
@@ -55,22 +54,25 @@ module.exports = {
 
       let thumbnail = null;
       if (req.file) {
-        // File type validation
-        const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
-        if (!allowedMimeTypes.includes(req.file.mimetype)) {
+        try {
+          const fileInfo = await fileStorage.uploadFile(
+            req.file.buffer,
+            safeSanitize(req.file.originalname),
+            req.file.mimetype,
+            true // optimize images
+          );
+
+          thumbnail = {
+            url: fileInfo.url,
+            filename: fileInfo.filename,
+            originalName: fileInfo.originalName,
+            size: fileInfo.size,
+          };
+        } catch (fileError) {
           return res.status(400).json({
-            error: "Only JPEG, JPG, and PNG images are allowed.",
+            error: fileError.message,
           });
         }
-
-        const result = await uploadToCloudinaryBuffer(
-          req.file.buffer,
-          safeSanitize(req.file.originalname)
-        );
-        thumbnail = {
-          url: result.secure_url,
-          publicId: result.public_id,
-        };
       }
 
       const project = await Project.create({
@@ -123,6 +125,24 @@ module.exports = {
     }
   },
 
+  getProjectBySlug: async (req, res) => {
+    try {
+      const { slug } = req.params;
+
+      const project = await Project.findOne({ slug }).populate(
+        "sections.template",
+        "name description icon"
+      );
+
+      if (!project) return res.status(404).json({ error: "Project not found" });
+
+      res.json({ data: project });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Server error" });
+    }
+  },
+
   updateProject: async (req, res) => {
     try {
       const { title, slug, description } = req.body;
@@ -154,8 +174,9 @@ module.exports = {
         return res.status(404).json({ error: "Project not found" });
       }
 
-      if (project.thumbnail?.publicId) {
-        await deleteFromCloudinary(project.thumbnail.publicId);
+      // Delete thumbnail file if exists
+      if (project.thumbnail?.filename) {
+        await fileStorage.deleteFile(project.thumbnail.filename);
       }
 
       await project.deleteOne();
@@ -264,24 +285,32 @@ module.exports = {
             const file = files.find((f) => f.fieldname === fileFieldName);
 
             if (file) {
-              const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
-              if (!allowedMimeTypes.includes(file.mimetype)) {
-                throw new Error(
-                  `Invalid file type for card ${idx}. Only images allowed.`
+              try {
+                const fileInfo = await fileStorage.uploadFile(
+                  file.buffer,
+                  file.originalname,
+                  file.mimetype,
+                  true
                 );
-              }
 
-              const result = await uploadToCloudinaryBuffer(
-                file.buffer,
-                file.originalname
-              );
-              return {
-                ...card,
-                image: {
-                  url: result.secure_url,
-                  publicId: result.public_id,
-                },
-              };
+                return {
+                  ...card,
+                  image: {
+                    url: fileInfo.url,
+                    filename: fileInfo.filename,
+                    originalName: fileInfo.originalName,
+                  },
+                };
+              } catch (fileError) {
+                console.warn(
+                  `File upload failed for card ${idx}:`,
+                  fileError.message
+                );
+                return {
+                  ...card,
+                  image: null,
+                };
+              }
             }
 
             // Existing image handling

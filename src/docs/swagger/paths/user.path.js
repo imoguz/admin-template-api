@@ -3,7 +3,6 @@ module.exports = {
     post: {
       summary: "Create a new user",
       tags: ["Users"],
-      security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
         content: {
@@ -22,11 +21,10 @@ module.exports = {
           },
         },
         400: { $ref: "#/components/responses/BadRequest" },
-        401: { $ref: "#/components/responses/Unauthorized" },
       },
     },
     get: {
-      summary: "Get list of users (admin only)",
+      summary: "Get all users (admin only)",
       tags: ["Users"],
       security: [{ bearerAuth: [] }],
       parameters: [
@@ -39,7 +37,7 @@ module.exports = {
       ],
       responses: {
         200: {
-          description: "Paginated list of users",
+          description: "List of users",
           content: {
             "application/json": {
               schema: {
@@ -54,59 +52,6 @@ module.exports = {
                     },
                   },
                 ],
-              },
-            },
-          },
-        },
-        401: { $ref: "#/components/responses/Unauthorized" },
-        403: { $ref: "#/components/responses/Forbidden" },
-      },
-    },
-  },
-
-  "/users/verify": {
-    get: {
-      summary: "Verify a user account via token",
-      tags: ["Users"],
-      parameters: [
-        {
-          in: "query",
-          name: "token",
-          schema: { type: "string" },
-          required: true,
-          description: "Verification token sent via email",
-        },
-      ],
-      responses: {
-        302: { description: "Redirect to frontend verification result page" },
-        400: { $ref: "#/components/responses/BadRequest" },
-        404: { $ref: "#/components/responses/NotFound" },
-      },
-    },
-  },
-
-  "/users/staff": {
-    get: {
-      summary: "Get all active staff users with assignable positions",
-      tags: ["Users"],
-      security: [{ bearerAuth: [] }],
-      responses: {
-        200: {
-          description: "List of staff users",
-          content: {
-            "application/json": {
-              schema: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    _id: { type: "string" },
-                    firstname: { type: "string" },
-                    lastname: { type: "string" },
-                    position: { type: "string" },
-                    profileUrl: { type: "string", nullable: true },
-                  },
-                },
               },
             },
           },
@@ -138,11 +83,12 @@ module.exports = {
       },
     },
     put: {
-      summary: "Update a user",
+      summary: "Update a user by ID",
       tags: ["Users"],
       security: [{ bearerAuth: [] }],
       parameters: [{ $ref: "#/components/parameters/id" }],
       requestBody: {
+        required: true,
         content: {
           "application/json": {
             schema: { $ref: "#/components/schemas/UpdateUserInput" },
@@ -158,6 +104,7 @@ module.exports = {
             },
           },
         },
+        400: { $ref: "#/components/responses/BadRequest" },
         401: { $ref: "#/components/responses/Unauthorized" },
         403: { $ref: "#/components/responses/Forbidden" },
         404: { $ref: "#/components/responses/NotFound" },

@@ -105,6 +105,22 @@ app.use(fileUploadSecurity);
 const xssSanitize = require("./src/middlewares/xssSanitize");
 app.use(xssSanitize);
 
+// ----- Static File Serving -----
+const path = require("path");
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"), {
+    maxAge: "1d",
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, path) => {
+      // Security headers for static files
+      res.set("X-Content-Type-Options", "nosniff");
+      res.set("X-Frame-Options", "DENY");
+    },
+  })
+);
+
 // -----Logger -----
 const logger = require("./src/middlewares/logger");
 app.use(logger);

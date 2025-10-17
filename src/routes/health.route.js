@@ -5,7 +5,6 @@ const mongoose = require("mongoose");
 const path = require("path");
 const fs = require("fs");
 
-// Basic health check
 router.get("/", (req, res) => {
   res.json({
     status: "healthy",
@@ -17,7 +16,6 @@ router.get("/", (req, res) => {
   });
 });
 
-// Database health check
 router.get("/db", async (req, res) => {
   try {
     const dbState = mongoose.connection.readyState;
@@ -46,7 +44,6 @@ router.get("/db", async (req, res) => {
   }
 });
 
-// Comprehensive health check
 router.get("/detailed", async (req, res) => {
   try {
     const dbPing = await Promise.allSettled([
@@ -82,9 +79,7 @@ router.get("/detailed", async (req, res) => {
       },
     };
 
-    // Overall status
     const servicesHealthy = health.services.database.status === "connected";
-
     health.status = servicesHealthy ? "healthy" : "degraded";
 
     res.json(health);
@@ -97,7 +92,6 @@ router.get("/detailed", async (req, res) => {
   }
 });
 
-// Backup health check
 router.get("/backup", async (req, res) => {
   try {
     const backupDir = path.join(process.cwd(), "backups");

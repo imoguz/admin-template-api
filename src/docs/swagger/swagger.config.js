@@ -9,11 +9,17 @@ const authPaths = require("./paths/auth.path");
 const authSchemas = require("./schemas/auth.schema");
 const userPaths = require("./paths/user.path");
 const userSchemas = require("./schemas/user.schema");
+const projectPaths = require("./paths/project.path");
+const projectSchemas = require("./schemas/project.schema");
+const sectionTemplatePaths = require("./paths/sectionTemplate.path");
+const sectionTemplateSchemas = require("./schemas/sectionTemplateschema");
+const publicPaths = require("./paths/public.path");
+const publicSchemas = require("./schemas/public.schema");
 
 module.exports = {
   openapi: "3.0.0",
   info: {
-    title: "Codencia Legal Consultancy API",
+    title: "Landing Page Template Api",
     version: pkg.version,
     description: pkg.description || "API Documentation",
   },
@@ -34,6 +40,9 @@ module.exports = {
   paths: {
     ...authPaths,
     ...userPaths,
+    ...projectPaths,
+    ...sectionTemplatePaths,
+    ...publicPaths,
   },
   components: {
     securitySchemes: {
@@ -42,10 +51,13 @@ module.exports = {
     parameters,
     responses,
     schemas: {
-      ...authSchemas,
       ...commonSchemas,
       ...errorSchemas,
+      ...authSchemas,
       ...userSchemas,
+      ...projectSchemas,
+      ...sectionTemplateSchemas,
+      ...publicSchemas,
     },
   },
   security: [{ bearerAuth: [] }],

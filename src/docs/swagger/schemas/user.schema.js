@@ -13,23 +13,16 @@ module.exports = {
       },
       role: {
         type: "string",
-        enum: ["admin", "manager", "staff", "client"],
-        example: "client",
+        enum: ["admin", "staff"],
+        example: "staff",
       },
-      position: {
-        type: "string",
-        enum: ["lawyer", "assistant", "paralegal", "intern", null],
-        nullable: true,
-        example: "lawyer",
-        description: "Only non-client roles can have a position",
-      },
-      isVerified: { type: "boolean", example: false },
       isActive: { type: "boolean", example: true },
       isDeleted: { type: "boolean", example: false },
       createdAt: { type: "string", format: "date-time" },
       updatedAt: { type: "string", format: "date-time" },
     },
   },
+
   CreateUserInput: {
     type: "object",
     required: ["firstname", "lastname", "email", "password"],
@@ -37,7 +30,12 @@ module.exports = {
       firstname: { type: "string", example: "John" },
       lastname: { type: "string", example: "Doe" },
       email: { type: "string", format: "email", example: "john@example.com" },
-      password: { type: "string", example: "StrongP@ssw0rd" },
+      password: {
+        type: "string",
+        example: "StrongP@ssw0rd",
+        description:
+          "8-32 chars, must include uppercase, lowercase, number, and special character.",
+      },
       profileUrl: {
         type: "string",
         nullable: true,
@@ -45,25 +43,23 @@ module.exports = {
       },
       role: {
         type: "string",
-        enum: ["admin", "manager", "staff", "client"],
-        example: "client",
-      },
-      position: {
-        type: "string",
-        enum: ["lawyer", "assistant", "paralegal", "intern", null],
-        nullable: true,
-        example: null,
-        description: "Ignored if role is client",
+        enum: ["admin", "staff"],
+        example: "staff",
       },
     },
   },
+
   UpdateUserInput: {
     type: "object",
     properties: {
       firstname: { type: "string", example: "John" },
       lastname: { type: "string", example: "Doe" },
       email: { type: "string", format: "email", example: "john@example.com" },
-      password: { type: "string", example: "StrongP@ssw0rd" },
+      password: {
+        type: "string",
+        example: "StrongP@ssw0rd",
+        description: "Optional; must meet password policy if provided.",
+      },
       profileUrl: {
         type: "string",
         nullable: true,
@@ -71,15 +67,8 @@ module.exports = {
       },
       role: {
         type: "string",
-        enum: ["admin", "manager", "staff", "client"],
-        example: "client",
-      },
-      position: {
-        type: "string",
-        enum: ["lawyer", "assistant", "paralegal", "intern", null],
-        nullable: true,
-        example: "lawyer",
-        description: "Ignored if role is client",
+        enum: ["admin", "staff"],
+        example: "staff",
       },
       isActive: { type: "boolean", example: true },
     },

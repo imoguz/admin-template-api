@@ -17,6 +17,7 @@ const {
   listProjects,
   createProject,
   getProject,
+  getProjectBySlug,
   updateProject,
   deleteProject,
   addSection,
@@ -46,6 +47,13 @@ router.get(
   jwtVerification,
   requirePermission("VIEW_PROJECT"),
   getProject
+);
+
+router.get(
+  "/slug/:slug",
+  jwtVerification,
+  requirePermission("VIEW_PROJECT"),
+  getProjectBySlug
 );
 
 router.put(

@@ -6,7 +6,6 @@ const { createAuditLog } = require("../helpers/audit.helper");
 module.exports = {
   listTemplates: async (req, res) => {
     try {
-      // Direct database fetch (cache removed)
       const templates = await SectionTemplate.find({ isActive: true })
         .sort({ name: 1 })
         .select("name description icon slug")

@@ -26,7 +26,7 @@ async function createAuditLog({
     });
   } catch (err) {
     console.error("Audit log could not be written:", err);
-    // Audit log hatası uygulamayı durdurmamalı
+    // Audit log error can not stop app
   }
 }
 
@@ -35,7 +35,7 @@ const auditMiddleware = (req, res, next) => {
   const originalSend = res.send;
 
   res.send = function (data) {
-    // Sadece successful operations için audit log
+    // audit log for only successful operations
     if (res.statusCode >= 200 && res.statusCode < 300) {
       const operation = getOperationType(req.method);
 
@@ -74,7 +74,7 @@ function getCollectionName(path) {
 }
 
 function shouldAudit(operation, path) {
-  // Sadece kritik operations için audit
+  // audit for only critic operations
   const criticalPaths = ["/projects", "/users"];
   const criticalOperations = ["create", "update", "delete"];
 

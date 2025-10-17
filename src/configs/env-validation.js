@@ -19,10 +19,6 @@ const envVarsSchema = Joi.object({
 
   ALLOWED_ORIGINS: Joi.string().optional(),
   LOGFOLDER: Joi.string().default("./logs"),
-
-  CLOUDINARY_CLOUD_NAME: Joi.string().optional(),
-  CLOUDINARY_API_KEY: Joi.string().optional(),
-  CLOUDINARY_API_SECRET: Joi.string().optional(),
 }).unknown();
 
 const { error, value: envVars } = envVarsSchema.validate(process.env);

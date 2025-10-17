@@ -72,6 +72,11 @@ const ProjectSchema = new Schema(
 
     sections: [SectionSchema],
 
+    isPublished: {
+      type: Boolean,
+      default: false,
+    },
+
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",

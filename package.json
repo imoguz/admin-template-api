@@ -1,14 +1,18 @@
 {
-  "name": "admin-template-api",
+  "name": "landing-page-template-api",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
+    "docker:restart": "docker-compose restart",
+    "docker:backup": "docker-compose exec backend node src/scripts/backup.js",
+    "docker:restore:list": "docker-compose exec backend node src/scripts/restore.js --list",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:security": "cross-env NODE_ENV=test jest src/tests/security.test.js --verbose",
     "test:manual": "node src/tests/manual-security-test.js",
@@ -25,7 +29,6 @@
   "type": "commonjs",
   "dependencies": {
     "bcrypt": "^6.0.0",
-    "cloudinary": "^2.6.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
@@ -40,12 +43,12 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.0",
     "nodemailer": "^7.0.3",
-    "rate-limit-redis": "^4.2.2",
-    "redis": "^5.8.3",
     "sanitize-html": "^2.17.0",
+    "sharp": "^0.34.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "tar": "^7.5.1",
+    "uuid": "^13.0.0",
     "validator": "^13.15.0"
   },
   "devDependencies": {
