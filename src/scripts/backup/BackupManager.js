@@ -55,7 +55,8 @@ class BackupManager {
       const mongoResult = await this.createMongoDBDump(backupPath);
       const metadata = await this.collectSystemMetadata(backupPath, backupName);
 
-      await this.backupApplicationConfig(backupPath);
+      // applicationConfig'den collections bilgisini al
+      const appConfig = await this.backupApplicationConfig(backupPath);
 
       const compressedPath = await this.compressBackup(backupPath, backupName);
       this.compressedPath = compressedPath;
@@ -67,7 +68,11 @@ class BackupManager {
       const result = {
         success: true,
         backup: `${backupName}.tar.gz`,
-        metadata,
+        metadata: {
+          ...metadata,
+          collections: appConfig.collections, // collections bilgisini metadata'ya ekle
+        },
+        mongoResult, // mongo dump sonucunu da ekle
         localPath: compressedPath,
         timestamp: new Date().toISOString(),
       };

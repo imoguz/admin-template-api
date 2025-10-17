@@ -51,7 +51,7 @@ async function main() {
     console.log(`File: ${result.backup}`);
     console.log(`Size: ${fileSize}`);
     console.log(`Time: ${result.timestamp}`);
-    console.log(`Collections: ${result.metadata?.collections?.length || 0}`);
+    console.log(`Collections: ${result.mongoResult?.collections?.length || 0}`);
     console.log("=".repeat(50));
 
     await mongoose.disconnect();
